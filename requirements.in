@@ -1,0 +1,5 @@
+boto3
+click
+boto3-type-annotations-with-docs
+graphviz
+jmespath
