@@ -13,6 +13,9 @@ from botocore.exceptions import ClientError
 from graphviz import Digraph
 import jmespath
 import time
+from colorama import init
+from colorama import Fore, Back, Style
+init(autoreset=True)
 
 logger = logging.getLogger()
 logging.basicConfig(
@@ -35,7 +38,7 @@ IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
     "-t", "--team-name", "team_name", default="reco", show_default=True, help="TODO"
 )
 def export_infra_graph(env: str, team_name):
-    logger.info(f"Starting infra export for {env}")
+    logger.info(f"{Fore.BLUE}Starting infra export for {env}. Can take some minutes.")
     exporter = InfraGraphExporter(env, team_name)
     exporter.export()
 
@@ -70,31 +73,34 @@ class InfraGraphExporter:
     def export(self):
         stack_infos = list(self._gather_stacks())
         self._print_stack_infos(stack_infos)
-        exports = list(self._gather_and_filter_exports())
-        logger.info(f"Number of exports gathered: {len(exports)}")
-        exports_enriched = list(self._gather_imports(exports))
-        logger.info(f"Number of enriched exports gathered: {len(exports_enriched)}")
+        exports = list(self._gather_and_filter_exports(stack_infos))
+        imported_exports = [export for export in exports if len(export.importing_stacks) > 0]
+        self._print_export_infos(imported_exports)
+        self._visualize(imported_exports)
+        self._visualize_services(imported_exports)
 
-        logger.info("Export details")
-        for export in exports_enriched:
-            if len(export.importing_stacks) > 0: # TODO
+    def _print_export_infos(self, exports: List[StackExport]):
+        logger.info('\n')
+        logger.info(f"{Fore.BLUE}Export details:")
+        for export in exports:
+            logger.info(
+                f"{Style.BRIGHT}{export.export_name}:{export.export_value} [Stack: {export.exporting_stack_name}]"
+            )
+            for importing_stack in export.importing_stacks:
+                logger.info(f"\t{importing_stack}")
+
+        logger.info(f"{Fore.BLUE}Export details with service names:")
+        for export in exports:
+            if len(export.importing_services) == 1 and export.export_service == export.importing_services[0]:
                 logger.info(
-                    f"{export.exporting_stack_name}: {export.export_name} [{export.export_value}] -> {export.importing_stacks}"
+                    f"{Style.BRIGHT}{export.export_name} [Service: {export.export_service}] -> only reflexive dependency"
                 )
-
-        self._visualize([export for export in exports_enriched if len(export.importing_stacks) > 0])
-
-        exports_with_service_names = list(self._enrich_service_name(exports_enriched, stack_infos))
-
-        logger.info("Export details with service names")
-        for export in exports_with_service_names:
-            if len(export.importing_stacks) > 0: # TODO
-                logger.info( # TODO seperate or remove reflexive relationships
-                    f"{export.export_name} [{export.export_service}] -> {export.importing_services}"
+            else:
+                logger.info(
+                    f"{Style.BRIGHT}{export.export_name} [Service: {export.export_service}]"
                 )
-
-        self._visualize_services([export for export in exports_with_service_names if len(export.importing_stacks) > 0])
-
+                for importing_service in export.importing_services:
+                    logger.info(f"\t{importing_service}")
 
     def _enrich_service_name(self, exports_enriched, stack_infos):
         grouped_by_stack = {}
@@ -116,7 +122,8 @@ class InfraGraphExporter:
         
 
     def _print_stack_infos(self, stack_infos: List[StackInfo]):
-        logger.info("Stack without ServiceName:")
+        logger.info("\n")
+        logger.info(f"{Fore.BLUE}Stacks without service name:")
         grouped_by_service = defaultdict(list)
         for stack_info in stack_infos:
             if stack_info.service_name is None:
@@ -125,7 +132,15 @@ class InfraGraphExporter:
                 grouped_by_service[stack_info.service_name].append(stack_info.stack_name)
                 
 
-        logger.info(grouped_by_service)
+        logger.info("\n")
+
+        logger.info(f"{Fore.BLUE}Stacks grouped by service name:")
+        for service, stacks in grouped_by_service.items():
+            logger.info(f"{Style.BRIGHT}\t{service}:")
+            for stack in stacks:
+                logger.info(f"\t\t{stack}")
+
+        logger.info("\n")
 
 
     def _visualize_services(self, exports_with_service_names):
@@ -160,8 +175,8 @@ class InfraGraphExporter:
                 node_set_important.add(export.exporting_stack_name)
         
         node_set_leafs = node_set_all - node_set_has_downstream
-        logger.info(f"node_set_important: {node_set_important}")
-        logger.info(f"node_set_leafs: {node_set_leafs}")
+        logger.debug(f"node_set_important: {node_set_important}")
+        logger.debug(f"node_set_leafs: {node_set_leafs}")
         
         for exporting_stack_name in node_set_important:
             node = exporting_stack_name.replace(f"{self._get_stack_prefix()}-", "")
@@ -195,14 +210,14 @@ class InfraGraphExporter:
 
         for page in pages:
             stacks = page['StackSummaries']
-            logger.info(f"Nr of stacks in page: {len(stacks)}")
+            logger.debug(f"Nr of stacks in page: {len(stacks)}")
             for stack in stacks:
                 stack_name = stack['StackName']
                 if stack_name.startswith(f"{self.team_name}-{self.env}"):
                     stack_detail_results = self.cfn_client.describe_stacks(StackName=stack_name)
                     stack_details = stack_detail_results["Stacks"][0]
                     stack_tags = stack_details["Tags"]
-                    logger.info(f"stack: {stack_name}")
+                    logger.debug(f"stack: {stack_name}")
                     service_name = self.service_tag_search.search(stack_tags)
                     if service_name is None:
                         service_name = self.service_tag2_search.search(stack_tags)
@@ -210,10 +225,21 @@ class InfraGraphExporter:
                     time.sleep(0.1) # avoid throttling
         
 
-    def _gather_and_filter_exports(self):
-        exports = self._gather_exports()
+    def _gather_and_filter_exports(self, stacks: List[StackInfo]):
+        exports_raw = self._gather_raw_exports()
+        exports = list(self._extract_exports(exports_raw))
+        logger.info(f"{Style.BRIGHT}Number of exports gathered: {len(exports)}")
+        exports_enriched = list(self._match_exports_with_imports(exports))
+        logger.info(f"{Style.BRIGHT}Number of import-enriched exports gathered: {len(exports_enriched)}")
+        exports_with_service_names = list(self._enrich_service_name(exports_enriched, stacks))
+        logger.info(f"{Style.BRIGHT}Number of import-enriched exports with service names gathered: {len(exports_with_service_names)}")
+        return exports_with_service_names
 
-        for export in exports:
+    def _get_stack_prefix(self):
+        return f"{self.team_name}-{self.env}"
+
+    def _extract_exports(self, raw_exports: List[dict]):
+        for export in raw_exports:
             stack_id = export["ExportingStackId"]
             stack = re.search(".*/(.*)/.*", stack_id).group(1)
             name = export["Name"]
@@ -224,16 +250,13 @@ class InfraGraphExporter:
                     export_name=name, exporting_stack_name=stack, export_value=value
                 )
 
-    def _get_stack_prefix(self):
-        return f"{self.team_name}-{self.env}"
-
-    def _gather_exports(self):
+    def _gather_raw_exports(self):
         should_paginate = True
         next_token = None
         exports = []
-        logger.info("Gather exports started")
+        logger.debug("Gather exports started")
         while should_paginate:
-            logger.info("Gather exports")  # TODO investigate pagniators
+            logger.debug("Gather exports")  # TODO investigate pagniators
             result = (
                 self.cfn_client.list_exports(NextToken=next_token)
                 if next_token
@@ -243,10 +266,10 @@ class InfraGraphExporter:
             exports.extend(result["Exports"])
             if not next_token:
                 should_paginate = False
-        logger.info("Gathered all exports")
+        logger.debug("Gathered all exports")
         return exports
 
-    def _gather_imports(self, exports: List[StackExport]):
+    def _match_exports_with_imports(self, exports: List[StackExport]):
         for export in exports:
             export_name = export.export_name
             should_paginate = True
@@ -254,7 +277,7 @@ class InfraGraphExporter:
             imports = []
             try:
                 while should_paginate:
-                    logger.info(
+                    logger.debug(
                         f"Gather import stacks for export name: {export_name}"
                     )  # TODO investigate pagniators
                     result = (
