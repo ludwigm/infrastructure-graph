@@ -5,6 +5,7 @@ import os
 import logging
 import boto3
 import re
+import csv
 from typing import List
 from boto3_type_annotations import cloudformation
 from collections import defaultdict
@@ -43,9 +44,24 @@ def export_infra_graph(env: str, team_name):
     exporter.export()
 
 @dataclass
+class ExternalDependency:
+    team_name: str
+    service_name: str
+    # parameter_name: str
+    # importing_stack: str
+
+@dataclass 
+class StackParameter:
+    name: str
+    value: str
+    description: str = None
+    external_dependency: ExternalDependency = None
+
+@dataclass
 class StackInfo:
     stack_name: str
     service_name: str
+    parameters: List[StackParameter] = field(default_factory=list) # TODO
 
 @dataclass
 class StackExport:
@@ -76,8 +92,8 @@ class InfraGraphExporter:
         exports = list(self._gather_and_filter_exports(stack_infos))
         imported_exports = [export for export in exports if len(export.importing_stacks) > 0]
         self._print_export_infos(imported_exports)
-        self._visualize(imported_exports)
-        self._visualize_services(imported_exports)
+        self._visualize(imported_exports, stack_infos)
+        self._visualize_services(imported_exports, stack_infos)
 
     def _print_export_infos(self, exports: List[StackExport]):
         logger.info('\n')
@@ -142,8 +158,17 @@ class InfraGraphExporter:
 
         logger.info("\n")
 
+        logger.info(f"{Fore.BLUE}Stacks parameters:")
+        for stack_info in stack_infos:
+            logger.info(f"{Style.BRIGHT}\t{stack_info.stack_name}:")
+            for param in stack_info.parameters:
+                description = f"[{param.description}]" if param.description else ""
+                logger.info(f"\t\t{param.name}: {param.value} {description}")
 
-    def _visualize_services(self, exports_with_service_names):
+        logger.info("\n")
+
+
+    def _visualize_services(self, exports_with_service_names, stack_infos: List[StackInfo]):
         stacks_graph = Digraph('StacksGraph', node_attr={'shape': 'box', 'style': 'filled', 'fillcolor':'grey'})
         edge_set = set()
         for export in exports_with_service_names:
@@ -154,9 +179,27 @@ class InfraGraphExporter:
         for export_service, importing_service in edge_set:
             stacks_graph.edge(export_service, importing_service)
 
+        edge_set_external = set()
+        node_set_external = set()
+
+        for stack in stack_infos:
+            for parameter in stack.parameters:
+                if parameter.external_dependency is not None:
+                    external_service_name = parameter.external_dependency.service_name
+                    # stacks_graph.node(external_service_name, _attributes={"fillcolor": "red"})
+                    # stacks_graph.edge(external_service_name, stack.service_name)
+                    node_set_external.add(external_service_name)
+                    edge_set_external.add((external_service_name, stack.service_name))
+
+        for node in node_set_external:
+            stacks_graph.node(node, _attributes={"fillcolor": "red"})
+
+        for from_node,to_node in edge_set_external:
+            stacks_graph.edge(from_node, to_node)
+
         stacks_graph.render(format="png", filename='output/export-services.gv')
 
-    def _visualize(self, exports_enriched): # TODO already filter before
+    def _visualize(self, exports_enriched, stack_infos: List[StackInfo]): # TODO already filter before
         stacks_graph = Digraph('StacksGraph', node_attr={'shape': 'box', 'style': 'filled', 'fillcolor':'grey'})
         edge_set = set()
         node_set_important = set()
@@ -191,11 +234,28 @@ class InfraGraphExporter:
             to_node = importing_stack.replace(f"{self.team_name}-{self.env}-", "")
             stacks_graph.edge(from_node, to_node)
 
+        edge_set_external = set()
+        node_set_external = set()
+
+        for stack in stack_infos:
+            for parameter in stack.parameters:
+                if parameter.external_dependency is not None:
+                    external_service_name = parameter.external_dependency.service_name
+                    stack_name = stack.stack_name.replace(f"{self._get_stack_prefix()}-", "")
+                    node_set_external.add(external_service_name)
+                    edge_set_external.add((external_service_name, stack_name))
+
+        for node in node_set_external:
+            stacks_graph.node(node, _attributes={"fillcolor": "red"})
+
+        for from_node,to_node in edge_set_external:
+            stacks_graph.edge(from_node, to_node)
+
         stacks_graph.render(format="png", filename='output/export-stacks.gv')
 
     def _gather_stacks(self):
         paginator = self.cfn_client.get_paginator('list_stacks')
-        self.cfn_client.list_stacks()
+        # self.cfn_client.list_stacks() # TODO remove
         pages = paginator.paginate(StackStatusFilter=[
             "CREATE_IN_PROGRESS",
             'CREATE_COMPLETE',
@@ -215,15 +275,45 @@ class InfraGraphExporter:
                 stack_name = stack['StackName']
                 if stack_name.startswith(f"{self.team_name}-{self.env}"):
                     stack_detail_results = self.cfn_client.describe_stacks(StackName=stack_name)
+                    stack_template_details_result = self.cfn_client.get_template_summary(StackName=stack_name)
                     stack_details = stack_detail_results["Stacks"][0]
                     stack_tags = stack_details["Tags"]
                     logger.debug(f"stack: {stack_name}")
+
+                    parameters = self._extract_parameters(stack_details, stack_template_details_result)
                     service_name = self.service_tag_search.search(stack_tags)
                     if service_name is None:
                         service_name = self.service_tag2_search.search(stack_tags)
-                    yield StackInfo(stack_name=stack_name, service_name=service_name)
+                    yield StackInfo(stack_name=stack_name, service_name=service_name, parameters=parameters)
                     time.sleep(0.1) # avoid throttling
         
+    def _extract_parameters(self, stack_details, stack_template_details):
+        params = {}
+
+        if "Parameters" not in stack_details:
+            return []
+
+        for parameter in stack_details["Parameters"]:
+            name = parameter["ParameterKey"]
+            value = parameter["ParameterValue"]
+            params[name] = StackParameter(name=name, value=value)
+
+        for parameter in stack_template_details["Parameters"]:
+            # print(parameter)
+            name = parameter["ParameterKey"]
+            description = parameter.get("Description")
+            # TODO exceptions
+            external_dep = None
+            if description and "|" in description:
+                metadata_part = description.split("|")[1].strip()
+                metadata = list([row for row in csv.reader([metadata_part], delimiter=',')])[0]
+                metadata_transformed = {metadata_entry.split("=")[0]:metadata_entry.split("=")[1] for metadata_entry in metadata}
+                external_dep = ExternalDependency(team_name=metadata_transformed["team"], service_name=metadata_transformed["service"])
+                logger.info(f"{Fore.YELLOW}{external_dep}")
+
+            params[name] = StackParameter(name=params[name].name, value=params[name].value, description=description, external_dependency=external_dep)
+
+        return params.values()
 
     def _gather_and_filter_exports(self, stacks: List[StackInfo]):
         exports_raw = self._gather_raw_exports()
