@@ -4,3 +4,4 @@ boto3-type-annotations-with-docs
 graphviz
 jmespath
 colorama
+pyhocon

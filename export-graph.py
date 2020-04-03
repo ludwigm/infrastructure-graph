@@ -16,6 +16,7 @@ import jmespath
 import time
 from colorama import init
 from colorama import Fore, Back, Style
+from pyhocon import ConfigFactory, ConfigTree
 init(autoreset=True)
 
 logger = logging.getLogger()
@@ -74,11 +75,13 @@ class StackExport:
 
 
 class InfraGraphExporter:
+    conf: ConfigTree
     env: str
     team_name: str
     cfn_client: cloudformation.Client
 
     def __init__(self, env, team_name):
+        self.conf = ConfigFactory.parse_file('config.hocon')
         self.cfn_client = boto3.client("cloudformation")
         self.env = env
         self.team_name = team_name
@@ -196,6 +199,14 @@ class InfraGraphExporter:
 
         for from_node,to_node in edge_set_external:
             stacks_graph.edge(from_node, to_node)
+
+        # TODO deduplicate
+        upstream_deps_config = self.conf.get("infraGraph.projects.reco.upstreamDependencies")
+        for service_name in upstream_deps_config:
+            for service_upstream_deps_conf in upstream_deps_config.get(service_name):
+                upstream_service = service_upstream_deps_conf.get_string("service")
+                stacks_graph.node(upstream_service, _attributes={"fillcolor": "blue"})
+                stacks_graph.edge(service_name, upstream_service)
 
         stacks_graph.render(format="png", filename='output/export-services.gv')
 

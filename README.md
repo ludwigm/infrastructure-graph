@@ -10,6 +10,11 @@ reco-dev-storeloader-task-rfystorage
 
 This things can be changed and need to be changed if you want to apply it in other accounts
 
+
+# Configuration
+
+Rename the `config.hocon.template` to `config.hocon` and adapt if you have external dependencies depending on your services. Names need to match up
+
 # How to execute
 
 ```

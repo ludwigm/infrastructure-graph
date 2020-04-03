@@ -1,0 +1,14 @@
+infraGraph {
+    projects {
+        projectName {
+           upstreamDependencies {
+                serviceName = [
+                    {
+                        team: externalTeamName
+                        service: externalServiceName
+                    },
+                ]
+           }
+        }
+    }
+}
