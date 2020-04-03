@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "aws-infra-dependencies"
+version = "0.1.0"
+description = "Tool for visualizing AWS CloudFormation Import/Exports"
+authors = ["Michael Ludwig"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+boto3 = "^1.12.35"
+click = "^7.1.1"
+boto3-type-annotations-with-docs = "^0.3.1"
+graphviz = "^0.13.2"
+jmespath = "^0.9.5"
+colorama = "^0.4.3"
+pyhocon = "^0.3.54"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+
+[tool.poetry.scripts]
+export-graph = "aws_infra_dependencies.export_graph:export_infra_graph"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"

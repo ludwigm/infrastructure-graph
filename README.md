@@ -19,7 +19,20 @@ Rename the `config.hocon.template` to `config.hocon` and adapt if you have exter
 
 ```
 # create venv
-pip install -r requirements.txt
-./export-graph.py
+poetry install
+poetry shell
+export-graph --help
+export-graph
 open output/
+```
+
+# Usage
+
+```
+Usage: export-graph [OPTIONS]
+
+Options:
+  -e, --env TEXT        On which environment to run this task  [default: dev]
+  -t, --team-name TEXT  TODO  [default: reco]
+  --help                Show this message and exit.
 ```
