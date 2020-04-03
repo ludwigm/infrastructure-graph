@@ -1,21 +1,20 @@
 #! /usr/bin/env python
 
-import click
 import os
 import logging
 import boto3
 import re
 import csv
 from typing import List
+from aws_infra_dependencies.model import *
 from boto3_type_annotations import cloudformation
 from collections import defaultdict
-from dataclasses import dataclass, field
 from botocore.exceptions import ClientError
 from graphviz import Digraph
 import jmespath
 import time
 from colorama import init
-from colorama import Fore, Back, Style
+from colorama import Fore, Style
 from pyhocon import ConfigFactory, ConfigTree
 init(autoreset=True)
 
@@ -25,54 +24,6 @@ logging.basicConfig(
 )
 
 IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
-
-
-@click.command()
-@click.option(
-    "-e",
-    "--env",
-    "env",
-    default="dev",
-    show_default=True,
-    help="On which environment to run this task",
-)
-@click.option(
-    "-t", "--team-name", "team_name", default="reco", show_default=True, help="TODO"
-)
-def export_infra_graph(env: str, team_name):
-    logger.info(f"{Fore.BLUE}Starting infra export for {env}. Can take some minutes.")
-    exporter = InfraGraphExporter(env, team_name)
-    exporter.export()
-
-@dataclass
-class ExternalDependency:
-    team_name: str
-    service_name: str
-    # parameter_name: str
-    # importing_stack: str
-
-@dataclass 
-class StackParameter:
-    name: str
-    value: str
-    description: str = None
-    external_dependency: ExternalDependency = None
-
-@dataclass
-class StackInfo:
-    stack_name: str
-    service_name: str
-    parameters: List[StackParameter] = field(default_factory=list) # TODO
-
-@dataclass
-class StackExport:
-    export_name: str
-    export_value: str
-    exporting_stack_name: str
-    importing_stacks: List[str] = field(default_factory=list)
-    export_service: str = None
-    importing_services: List[str] = field(default_factory=list)
-
 
 class InfraGraphExporter:
     conf: ConfigTree
@@ -404,7 +355,3 @@ class InfraGraphExporter:
                 export_value=export.export_value,
                 importing_stacks=imports,
             )
-
-
-if __name__ == "__main__":
-    export_infra_graph()
