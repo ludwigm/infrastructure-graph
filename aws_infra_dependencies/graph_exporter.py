@@ -1,21 +1,31 @@
 #! /usr/bin/env python
 
+# Core Library
 import os
-import logging
-import boto3
 import re
 import csv
-from typing import List
-from aws_infra_dependencies.model import *
-from boto3_type_annotations import cloudformation
-from collections import defaultdict
-from botocore.exceptions import ClientError
-from graphviz import Digraph
-import jmespath
 import time
-from colorama import init
-from colorama import Fore, Style
-from pyhocon import ConfigFactory, ConfigTree
+import logging
+from typing import List, DefaultDict
+from collections import defaultdict
+
+# Third party
+import boto3
+import jmespath
+from pyhocon import ConfigTree, ConfigFactory
+from colorama import Fore, Style, init
+from graphviz import Digraph
+from botocore.exceptions import ClientError
+from boto3_type_annotations import cloudformation
+
+# First party
+from aws_infra_dependencies.model import (
+    StackInfo,
+    StackExport,
+    StackParameter,
+    ExternalDependency,
+)
+
 init(autoreset=True)
 
 logger = logging.getLogger()
@@ -25,6 +35,7 @@ logging.basicConfig(
 
 IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
 
+
 class InfraGraphExporter:
     conf: ConfigTree
     env: str
@@ -32,25 +43,29 @@ class InfraGraphExporter:
     cfn_client: cloudformation.Client
 
     def __init__(self, env, team_name):
-        self.conf = ConfigFactory.parse_file('config.hocon')
+        self.conf = ConfigFactory.parse_file("config.hocon")
         self.cfn_client = boto3.client("cloudformation")
         self.env = env
         self.team_name = team_name
         # Replace with your own tag you want to group on to aggregate on higher level
         self.service_tag_search = jmespath.compile("[?Key==`ServiceName`]|[0]|Value")
-        self.service_tag2_search = jmespath.compile("[?Key==`Service`]|[0]|Value") # TODO align in infra
+        self.service_tag2_search = jmespath.compile(
+            "[?Key==`Service`]|[0]|Value"
+        )  # TODO align in infra
 
     def export(self):
         stack_infos = list(self._gather_stacks())
         self._print_stack_infos(stack_infos)
         exports = list(self._gather_and_filter_exports(stack_infos))
-        imported_exports = [export for export in exports if len(export.importing_stacks) > 0]
+        imported_exports = [
+            export for export in exports if len(export.importing_stacks) > 0
+        ]
         self._print_export_infos(imported_exports)
         self._visualize(imported_exports, stack_infos)
         self._visualize_services(imported_exports, stack_infos)
 
     def _print_export_infos(self, exports: List[StackExport]):
-        logger.info('\n')
+        logger.info("\n")
         logger.info(f"{Fore.BLUE}Export details:")
         for export in exports:
             logger.info(
@@ -61,7 +76,10 @@ class InfraGraphExporter:
 
         logger.info(f"{Fore.BLUE}Export details with service names:")
         for export in exports:
-            if len(export.importing_services) == 1 and export.export_service == export.importing_services[0]:
+            if (
+                len(export.importing_services) == 1
+                and export.export_service == export.importing_services[0]
+            ):
                 logger.info(
                     f"{Style.BRIGHT}{export.export_name} [Service: {export.export_service}] -> only reflexive dependency"
                 )
@@ -80,27 +98,31 @@ class InfraGraphExporter:
 
         for export in exports_enriched:
             service_name = grouped_by_stack[export.exporting_stack_name]
-            importing_services = [grouped_by_stack[importing_stack] for importing_stack in export.importing_stacks if grouped_by_stack.get(importing_stack) is not None]
+            importing_services = [
+                grouped_by_stack[importing_stack]
+                for importing_stack in export.importing_stacks
+                if grouped_by_stack.get(importing_stack) is not None
+            ]
             yield StackExport(
                 export_name=export.export_name,
                 exporting_stack_name=export.exporting_stack_name,
                 export_value=export.export_value,
                 export_service=service_name,
                 importing_stacks=export.importing_stacks,
-                importing_services=importing_services
+                importing_services=importing_services,
             )
-        
 
     def _print_stack_infos(self, stack_infos: List[StackInfo]):
         logger.info("\n")
         logger.info(f"{Fore.BLUE}Stacks without service name:")
-        grouped_by_service = defaultdict(list)
+        grouped_by_service: DefaultDict[str, List[str]] = defaultdict(list)
         for stack_info in stack_infos:
             if stack_info.service_name is None:
                 logger.info(stack_info)
             else:
-                grouped_by_service[stack_info.service_name].append(stack_info.stack_name)
-                
+                grouped_by_service[stack_info.service_name].append(
+                    stack_info.stack_name
+                )
 
         logger.info("\n")
 
@@ -121,13 +143,17 @@ class InfraGraphExporter:
 
         logger.info("\n")
 
-
-    def _visualize_services(self, exports_with_service_names, stack_infos: List[StackInfo]):
-        stacks_graph = Digraph('StacksGraph', node_attr={'shape': 'box', 'style': 'filled', 'fillcolor':'grey'})
+    def _visualize_services(
+        self, exports_with_service_names, stack_infos: List[StackInfo]
+    ):
+        stacks_graph = Digraph(
+            "StacksGraph",
+            node_attr={"shape": "box", "style": "filled", "fillcolor": "grey"},
+        )
         edge_set = set()
         for export in exports_with_service_names:
             for importing_service in export.importing_services:
-                if export.export_service != importing_service: # no reflexive
+                if export.export_service != importing_service:  # no reflexive
                     edge_set.add((export.export_service, importing_service))
 
         for export_service, importing_service in edge_set:
@@ -148,21 +174,28 @@ class InfraGraphExporter:
         for node in node_set_external:
             stacks_graph.node(node, _attributes={"fillcolor": "red"})
 
-        for from_node,to_node in edge_set_external:
+        for from_node, to_node in edge_set_external:
             stacks_graph.edge(from_node, to_node)
 
         # TODO deduplicate
-        upstream_deps_config = self.conf.get("infraGraph.projects.reco.upstreamDependencies")
+        upstream_deps_config = self.conf.get(
+            "infraGraph.projects.reco.upstreamDependencies"
+        )
         for service_name in upstream_deps_config:
             for service_upstream_deps_conf in upstream_deps_config.get(service_name):
                 upstream_service = service_upstream_deps_conf.get_string("service")
                 stacks_graph.node(upstream_service, _attributes={"fillcolor": "blue"})
                 stacks_graph.edge(service_name, upstream_service)
 
-        stacks_graph.render(format="png", filename='output/export-services.gv')
+        stacks_graph.render(format="png", filename="output/export-services.gv")
 
-    def _visualize(self, exports_enriched, stack_infos: List[StackInfo]): # TODO already filter before
-        stacks_graph = Digraph('StacksGraph', node_attr={'shape': 'box', 'style': 'filled', 'fillcolor':'grey'})
+    def _visualize(
+        self, exports_enriched, stack_infos: List[StackInfo]
+    ):  # TODO already filter before
+        stacks_graph = Digraph(
+            "StacksGraph",
+            node_attr={"shape": "box", "style": "filled", "fillcolor": "grey"},
+        )
         edge_set = set()
         node_set_important = set()
         node_set_all = set()
@@ -174,15 +207,14 @@ class InfraGraphExporter:
             for importing_stack in export.importing_stacks:
                 edge_set.add((export.exporting_stack_name, importing_stack))
                 node_set_all.add(importing_stack)
-                
 
             if len(export.importing_stacks) > IMPORTANT_STACK_DEPENDENCY_TRESHOLD:
                 node_set_important.add(export.exporting_stack_name)
-        
+
         node_set_leafs = node_set_all - node_set_has_downstream
         logger.debug(f"node_set_important: {node_set_important}")
         logger.debug(f"node_set_leafs: {node_set_leafs}")
-        
+
         for exporting_stack_name in node_set_important:
             node = exporting_stack_name.replace(f"{self._get_stack_prefix()}-", "")
             stacks_graph.node(node, _attributes={"fillcolor": "orange"})
@@ -203,52 +235,67 @@ class InfraGraphExporter:
             for parameter in stack.parameters:
                 if parameter.external_dependency is not None:
                     external_service_name = parameter.external_dependency.service_name
-                    stack_name = stack.stack_name.replace(f"{self._get_stack_prefix()}-", "")
+                    stack_name = stack.stack_name.replace(
+                        f"{self._get_stack_prefix()}-", ""
+                    )
                     node_set_external.add(external_service_name)
                     edge_set_external.add((external_service_name, stack_name))
 
         for node in node_set_external:
             stacks_graph.node(node, _attributes={"fillcolor": "red"})
 
-        for from_node,to_node in edge_set_external:
+        for from_node, to_node in edge_set_external:
             stacks_graph.edge(from_node, to_node)
 
-        stacks_graph.render(format="png", filename='output/export-stacks.gv')
+        stacks_graph.render(format="png", filename="output/export-stacks.gv")
 
     def _gather_stacks(self):
-        paginator = self.cfn_client.get_paginator('list_stacks')
+        paginator = self.cfn_client.get_paginator("list_stacks")
         # self.cfn_client.list_stacks() # TODO remove
-        pages = paginator.paginate(StackStatusFilter=[
-            "CREATE_IN_PROGRESS",
-            'CREATE_COMPLETE',
-            'ROLLBACK_COMPLETE',
-            'DELETE_FAILED',
-            'UPDATE_IN_PROGRESS',
-            'UPDATE_COMPLETE',
-            'UPDATE_ROLLBACK_FAILED',
-            'UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS',
-            'UPDATE_ROLLBACK_COMPLETE',
-            'REVIEW_IN_PROGRESS'])
+        pages = paginator.paginate(
+            StackStatusFilter=[
+                "CREATE_IN_PROGRESS",
+                "CREATE_COMPLETE",
+                "ROLLBACK_COMPLETE",
+                "DELETE_FAILED",
+                "UPDATE_IN_PROGRESS",
+                "UPDATE_COMPLETE",
+                "UPDATE_ROLLBACK_FAILED",
+                "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
+                "UPDATE_ROLLBACK_COMPLETE",
+                "REVIEW_IN_PROGRESS",
+            ]
+        )
 
         for page in pages:
-            stacks = page['StackSummaries']
+            stacks = page["StackSummaries"]
             logger.debug(f"Nr of stacks in page: {len(stacks)}")
             for stack in stacks:
-                stack_name = stack['StackName']
+                stack_name = stack["StackName"]
                 if stack_name.startswith(f"{self.team_name}-{self.env}"):
-                    stack_detail_results = self.cfn_client.describe_stacks(StackName=stack_name)
-                    stack_template_details_result = self.cfn_client.get_template_summary(StackName=stack_name)
+                    stack_detail_results = self.cfn_client.describe_stacks(
+                        StackName=stack_name
+                    )
+                    stack_template_details_result = self.cfn_client.get_template_summary(
+                        StackName=stack_name
+                    )
                     stack_details = stack_detail_results["Stacks"][0]
                     stack_tags = stack_details["Tags"]
                     logger.debug(f"stack: {stack_name}")
 
-                    parameters = self._extract_parameters(stack_details, stack_template_details_result)
+                    parameters = self._extract_parameters(
+                        stack_details, stack_template_details_result
+                    )
                     service_name = self.service_tag_search.search(stack_tags)
                     if service_name is None:
                         service_name = self.service_tag2_search.search(stack_tags)
-                    yield StackInfo(stack_name=stack_name, service_name=service_name, parameters=parameters)
-                    time.sleep(0.1) # avoid throttling
-        
+                    yield StackInfo(
+                        stack_name=stack_name,
+                        service_name=service_name,
+                        parameters=parameters,
+                    )
+                    time.sleep(0.1)  # avoid throttling
+
     def _extract_parameters(self, stack_details, stack_template_details):
         params = {}
 
@@ -268,12 +315,25 @@ class InfraGraphExporter:
             external_dep = None
             if description and "|" in description:
                 metadata_part = description.split("|")[1].strip()
-                metadata = list([row for row in csv.reader([metadata_part], delimiter=',')])[0]
-                metadata_transformed = {metadata_entry.split("=")[0]:metadata_entry.split("=")[1] for metadata_entry in metadata}
-                external_dep = ExternalDependency(team_name=metadata_transformed["team"], service_name=metadata_transformed["service"])
+                metadata = list(
+                    [row for row in csv.reader([metadata_part], delimiter=",")]
+                )[0]
+                metadata_transformed = {
+                    metadata_entry.split("=")[0]: metadata_entry.split("=")[1]
+                    for metadata_entry in metadata
+                }
+                external_dep = ExternalDependency(
+                    team_name=metadata_transformed["team"],
+                    service_name=metadata_transformed["service"],
+                )
                 logger.info(f"{Fore.YELLOW}{external_dep}")
 
-            params[name] = StackParameter(name=params[name].name, value=params[name].value, description=description, external_dependency=external_dep)
+            params[name] = StackParameter(
+                name=params[name].name,
+                value=params[name].value,
+                description=description,
+                external_dependency=external_dep,
+            )
 
         return params.values()
 
@@ -282,9 +342,15 @@ class InfraGraphExporter:
         exports = list(self._extract_exports(exports_raw))
         logger.info(f"{Style.BRIGHT}Number of exports gathered: {len(exports)}")
         exports_enriched = list(self._match_exports_with_imports(exports))
-        logger.info(f"{Style.BRIGHT}Number of import-enriched exports gathered: {len(exports_enriched)}")
-        exports_with_service_names = list(self._enrich_service_name(exports_enriched, stacks))
-        logger.info(f"{Style.BRIGHT}Number of import-enriched exports with service names gathered: {len(exports_with_service_names)}")
+        logger.info(
+            f"{Style.BRIGHT}Number of import-enriched exports gathered: {len(exports_enriched)}"
+        )
+        exports_with_service_names = list(
+            self._enrich_service_name(exports_enriched, stacks)
+        )
+        logger.info(
+            f"{Style.BRIGHT}Number of import-enriched exports with service names gathered: {len(exports_with_service_names)}"
+        )
         return exports_with_service_names
 
     def _get_stack_prefix(self):
@@ -293,14 +359,16 @@ class InfraGraphExporter:
     def _extract_exports(self, raw_exports: List[dict]):
         for export in raw_exports:
             stack_id = export["ExportingStackId"]
-            stack = re.search(".*/(.*)/.*", stack_id).group(1)
-            name = export["Name"]
-            value = export["Value"]
+            match = re.search(".*/(.*)/.*", stack_id)
+            if match:
+                stack = match.group(1)
+                name = export["Name"]
+                value = export["Value"]
 
-            if stack.startswith(self._get_stack_prefix()):
-                yield StackExport(
-                    export_name=name, exporting_stack_name=stack, export_value=value
-                )
+                if stack.startswith(self._get_stack_prefix()):
+                    yield StackExport(
+                        export_name=name, exporting_stack_name=stack, export_value=value
+                    )
 
     def _gather_raw_exports(self):
         should_paginate = True
@@ -326,7 +394,7 @@ class InfraGraphExporter:
             export_name = export.export_name
             should_paginate = True
             next_token = None
-            imports = []
+            imports: List[str] = []
             try:
                 while should_paginate:
                     logger.debug(

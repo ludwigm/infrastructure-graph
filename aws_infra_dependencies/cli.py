@@ -1,10 +1,15 @@
 #! /usr/bin/env python
 
-import click
+# Core Library
 import os
 import logging
-from aws_infra_dependencies.graph_exporter import InfraGraphExporter
+
+# Third party
+import click
 from colorama import Fore
+
+# First party
+from aws_infra_dependencies.graph_exporter import InfraGraphExporter
 
 logger = logging.getLogger()
 logging.basicConfig(
@@ -24,12 +29,18 @@ IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
     help="On which environment to run this task",
 )
 @click.option(
-    "-t", "--team-name", "team_name", default="reco", show_default=True, help="Team name is expected of part of the resource name and need to be specified here"
+    "-t",
+    "--team-name",
+    "team_name",
+    default="reco",
+    show_default=True,
+    help="Team name is expected of part of the resource name and need to be specified here",
 )
 def export_infra_graph(env: str, team_name):
     logger.info(f"{Fore.BLUE}Starting infra export for {env}. Can take some minutes.")
     exporter = InfraGraphExporter(env, team_name)
     exporter.export()
+
 
 if __name__ == "__main__":
     export_infra_graph()

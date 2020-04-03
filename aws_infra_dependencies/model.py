@@ -1,5 +1,7 @@
-from dataclasses import dataclass, field
-from typing import List
+# Core Library
+from typing import List, Optional
+from dataclasses import field, dataclass
+
 
 @dataclass
 class ExternalDependency:
@@ -8,18 +10,21 @@ class ExternalDependency:
     # parameter_name: str
     # importing_stack: str
 
-@dataclass 
+
+@dataclass
 class StackParameter:
     name: str
     value: str
-    description: str = None
-    external_dependency: ExternalDependency = None
+    description: Optional[str] = None
+    external_dependency: Optional[ExternalDependency] = None
+
 
 @dataclass
 class StackInfo:
     stack_name: str
     service_name: str
-    parameters: List[StackParameter] = field(default_factory=list) # TODO
+    parameters: List[StackParameter] = field(default_factory=list)  # TODO
+
 
 @dataclass
 class StackExport:
@@ -27,5 +32,5 @@ class StackExport:
     export_value: str
     exporting_stack_name: str
     importing_stacks: List[str] = field(default_factory=list)
-    export_service: str = None
+    export_service: str = Optional[None]
     importing_services: List[str] = field(default_factory=list)
