@@ -6,6 +6,7 @@ In its default configuration it is looking for the tags `ServiceName/Service` an
 
 ```
 reco-dev-storeloader-task-rfystorage
+<project>-<env>-<component_name>
 ```
 
 This things can be changed and need to be changed if you want to apply it in other accounts.
@@ -34,7 +35,12 @@ open output/
 Usage: export-graph [OPTIONS]
 
 Options:
-  -e, --env TEXT        On which environment to run this task  [default: dev]
-  -t, --team-name TEXT  TODO  [default: reco]
-  --help                Show this message and exit.
+  -e, --env TEXT           On which environment to run this task. e.g. dev,
+                           stg, prd  [default: dev]
+
+  -t, --project-name TEXT  Project/Team name is expected of part of the
+                           resource name and need to be specified here or
+                           taken from config
+
+  --help                   Show this message and exit.
 ```

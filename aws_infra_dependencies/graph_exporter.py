@@ -6,13 +6,12 @@ import re
 import csv
 import time
 import logging
-from typing import Any, Dict, List, Iterable, DefaultDict
+from typing import Any, Dict, List, Iterable, Optional, DefaultDict
 from collections import defaultdict
 
 # Third party
 import boto3
 import jmespath
-from pyhocon import ConfigTree, ConfigFactory
 from colorama import Fore, Style, init
 from graphviz import Digraph
 from botocore.exceptions import ClientError
@@ -25,6 +24,7 @@ from aws_infra_dependencies.model import (
     StackParameter,
     ExternalDependency,
 )
+from aws_infra_dependencies.config import InfraGraphConfig, load_config
 
 init(autoreset=True)
 
@@ -37,16 +37,18 @@ IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
 
 
 class InfraGraphExporter:
-    conf: ConfigTree
+    config: InfraGraphConfig
     env: str
-    team_name: str
+    project_name: str
     cfn_client: cloudformation.Client
 
-    def __init__(self, env: str, team_name: str):
-        self.conf = ConfigFactory.parse_file("config.hocon")
+    def __init__(self, env: str, project_name: Optional[str] = None):
+        self.config = load_config()
         self.cfn_client = boto3.client("cloudformation")
         self.env = env
-        self.team_name = team_name
+        self.project_name = (
+            project_name if project_name else self.config.default_project
+        )
         # Replace with your own tag you want to group on to aggregate on higher level
         self.service_tag_search = jmespath.compile("[?Key==`ServiceName`]|[0]|Value")
         self.service_tag2_search = jmespath.compile(
@@ -63,6 +65,7 @@ class InfraGraphExporter:
         self._print_export_infos(imported_exports)
         self._visualize(imported_exports, stack_infos)
         self._visualize_services(imported_exports, stack_infos)
+        logger.info("\nGraph exports finished in ./output folder")
 
     def _print_export_infos(self, exports: List[StackExport]):
         logger.info("\n")
@@ -182,12 +185,13 @@ class InfraGraphExporter:
             stacks_graph.edge(from_node, to_node)
 
         # TODO deduplicate
-        upstream_deps_config = self.conf.get(
-            "infraGraph.projects.reco.upstreamDependencies"
-        )
-        for service_name in upstream_deps_config:
-            for service_upstream_deps_conf in upstream_deps_config.get(service_name):
-                upstream_service = service_upstream_deps_conf.get_string("service")
+        upstream_dependencies = self.config.projects[
+            self.project_name
+        ].upstream_dependencies
+
+        for service_name, dependencies in upstream_dependencies.items():
+            for dependency in dependencies:
+                upstream_service = dependency.service
                 stacks_graph.node(upstream_service, _attributes={"fillcolor": "blue"})
                 stacks_graph.edge(service_name, upstream_service)
 
@@ -229,7 +233,7 @@ class InfraGraphExporter:
 
         for exporting_stack_name, importing_stack in edge_set:
             from_node = exporting_stack_name.replace(f"{self._get_stack_prefix()}-", "")
-            to_node = importing_stack.replace(f"{self.team_name}-{self.env}-", "")
+            to_node = importing_stack.replace(f"{self.project_name}-{self.env}-", "")
             stacks_graph.edge(from_node, to_node)
 
         edge_set_external = set()
@@ -276,7 +280,7 @@ class InfraGraphExporter:
             logger.debug(f"Nr of stacks in page: {len(stacks)}")
             for stack in stacks:
                 stack_name = stack["StackName"]
-                if stack_name.startswith(f"{self.team_name}-{self.env}"):
+                if stack_name.startswith(f"{self.project_name}-{self.env}"):
                     stack_detail_results = self.cfn_client.describe_stacks(
                         StackName=stack_name
                     )
@@ -360,7 +364,7 @@ class InfraGraphExporter:
         return exports_with_service_names
 
     def _get_stack_prefix(self) -> str:
-        return f"{self.team_name}-{self.env}"
+        return f"{self.project_name}-{self.env}"
 
     def _extract_exports(self, raw_exports: List[Dict]) -> Iterable[StackExport]:
         for export in raw_exports:

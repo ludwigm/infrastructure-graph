@@ -1,4 +1,5 @@
 infraGraph {
+    defaultProject = projectName
     projects {
         projectName {
            upstreamDependencies {

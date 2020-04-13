@@ -13,6 +13,7 @@ graphviz = "^0.13.2"
 jmespath = "^0.9.5"
 colorama = "^0.4.3"
 pyhocon = "^0.3.54"
+pydantic = "^1.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
