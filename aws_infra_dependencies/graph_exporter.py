@@ -6,7 +6,7 @@ import re
 import csv
 import time
 import logging
-from typing import List, DefaultDict
+from typing import Any, Dict, List, Iterable, DefaultDict
 from collections import defaultdict
 
 # Third party
@@ -42,7 +42,7 @@ class InfraGraphExporter:
     team_name: str
     cfn_client: cloudformation.Client
 
-    def __init__(self, env, team_name):
+    def __init__(self, env: str, team_name: str):
         self.conf = ConfigFactory.parse_file("config.hocon")
         self.cfn_client = boto3.client("cloudformation")
         self.env = env
@@ -90,7 +90,9 @@ class InfraGraphExporter:
                 for importing_service in export.importing_services:
                     logger.info(f"\t{importing_service}")
 
-    def _enrich_service_name(self, exports_enriched, stack_infos):
+    def _enrich_service_name(
+        self, exports_enriched: List[StackExport], stack_infos: List[StackInfo]
+    ) -> Iterable[StackExport]:
         grouped_by_stack = {}
         for stack_info in stack_infos:
             if stack_info.service_name is not None:
@@ -144,7 +146,9 @@ class InfraGraphExporter:
         logger.info("\n")
 
     def _visualize_services(
-        self, exports_with_service_names, stack_infos: List[StackInfo]
+        self,
+        exports_with_service_names: List[StackExport],
+        stack_infos: List[StackInfo],
     ):
         stacks_graph = Digraph(
             "StacksGraph",
@@ -190,7 +194,7 @@ class InfraGraphExporter:
         stacks_graph.render(format="png", filename="output/export-services.gv")
 
     def _visualize(
-        self, exports_enriched, stack_infos: List[StackInfo]
+        self, exports_enriched: List[StackExport], stack_infos: List[StackInfo]
     ):  # TODO already filter before
         stacks_graph = Digraph(
             "StacksGraph",
@@ -249,7 +253,7 @@ class InfraGraphExporter:
 
         stacks_graph.render(format="png", filename="output/export-stacks.gv")
 
-    def _gather_stacks(self):
+    def _gather_stacks(self) -> Iterable[StackInfo]:
         paginator = self.cfn_client.get_paginator("list_stacks")
         # self.cfn_client.list_stacks() # TODO remove
         pages = paginator.paginate(
@@ -296,8 +300,10 @@ class InfraGraphExporter:
                     )
                     time.sleep(0.1)  # avoid throttling
 
-    def _extract_parameters(self, stack_details, stack_template_details):
-        params = {}
+    def _extract_parameters(
+        self, stack_details: Dict, stack_template_details: Dict
+    ) -> List[StackParameter]:
+        params: Dict[str, StackParameter] = {}
 
         if "Parameters" not in stack_details:
             return []
@@ -335,9 +341,9 @@ class InfraGraphExporter:
                 external_dependency=external_dep,
             )
 
-        return params.values()
+        return list(params.values())
 
-    def _gather_and_filter_exports(self, stacks: List[StackInfo]):
+    def _gather_and_filter_exports(self, stacks: List[StackInfo]) -> List[StackExport]:
         exports_raw = self._gather_raw_exports()
         exports = list(self._extract_exports(exports_raw))
         logger.info(f"{Style.BRIGHT}Number of exports gathered: {len(exports)}")
@@ -353,10 +359,10 @@ class InfraGraphExporter:
         )
         return exports_with_service_names
 
-    def _get_stack_prefix(self):
+    def _get_stack_prefix(self) -> str:
         return f"{self.team_name}-{self.env}"
 
-    def _extract_exports(self, raw_exports: List[dict]):
+    def _extract_exports(self, raw_exports: List[Dict]) -> Iterable[StackExport]:
         for export in raw_exports:
             stack_id = export["ExportingStackId"]
             match = re.search(".*/(.*)/.*", stack_id)
@@ -370,10 +376,10 @@ class InfraGraphExporter:
                         export_name=name, exporting_stack_name=stack, export_value=value
                     )
 
-    def _gather_raw_exports(self):
+    def _gather_raw_exports(self) -> List[Dict[Any, Any]]:
         should_paginate = True
         next_token = None
-        exports = []
+        exports: List[Dict[Any, Any]] = []
         logger.debug("Gather exports started")
         while should_paginate:
             logger.debug("Gather exports")  # TODO investigate pagniators
@@ -389,7 +395,9 @@ class InfraGraphExporter:
         logger.debug("Gathered all exports")
         return exports
 
-    def _match_exports_with_imports(self, exports: List[StackExport]):
+    def _match_exports_with_imports(
+        self, exports: List[StackExport]
+    ) -> Iterable[StackExport]:
         for export in exports:
             export_name = export.export_name
             should_paginate = True
