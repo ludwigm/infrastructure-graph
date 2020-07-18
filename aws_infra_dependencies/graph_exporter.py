@@ -2,31 +2,19 @@
 
 # Core Library
 import os
-import re
-import csv
-import time
 import logging
-from typing import Any, Dict, List, Iterable, Optional, DefaultDict
+from typing import List, Optional, DefaultDict
 from pathlib import Path
 from collections import defaultdict
 
 # Third party
-import boto3
-import jmespath
 from colorama import Fore, Style, init
 from graphviz import Digraph
-from botocore.exceptions import ClientError
-from boto3_type_annotations import cloudformation
 
 # First party
-from aws_infra_dependencies.model import (
-    StackInfo,
-    StackExport,
-    StackParameter,
-    ExternalDependency,
-)
-from aws_infra_dependencies.utils import file_cached
+from aws_infra_dependencies.model import StackInfo, StackExport
 from aws_infra_dependencies.config import InfraGraphConfig, load_config
+from aws_infra_dependencies.data_extractor import DataExtractor
 
 init(autoreset=True)
 
@@ -40,10 +28,11 @@ IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
 
 class InfraGraphExporter:
     config: InfraGraphConfig
+    data_extractor: DataExtractor
     output_folder: str
     env: str
     project_name: str
-    cfn_client: cloudformation.Client
+    stack_prefix: str
 
     def __init__(
         self,
@@ -53,24 +42,20 @@ class InfraGraphExporter:
         output_folder="./output",
     ):
         self.config = load_config(config_path)
-        self.cfn_client = boto3.client("cloudformation")
         self.output_folder = output_folder
         self.env = env
         self.project_name = (
             project_name if project_name else self.config.default_project
         )
-        # Replace with your own tag you want to group on to aggregate on higher level
-        self.service_tag_search = jmespath.compile("[?Key==`ServiceName`]|[0]|Value")
-        self.service_tag2_search = jmespath.compile(
-            "[?Key==`Service`]|[0]|Value"
-        )  # TODO align in infra
+        self.stack_prefix = f"{self.project_name}-{self.env}"
+        self.data_extractor = DataExtractor(self.stack_prefix)
 
     def export(self, refresh: bool):
         if refresh:
             self.delete_caches()
-        stack_infos = self._gather_stacks()
+        stack_infos = self.data_extractor.gather_stacks()
         self._print_stack_infos(stack_infos)
-        exports = self._gather_and_filter_exports(stack_infos)
+        exports = self.data_extractor.gather_and_filter_exports(stack_infos)
         imported_exports = [
             export for export in exports if len(export.importing_stacks) > 0
         ]
@@ -114,31 +99,6 @@ class InfraGraphExporter:
                 )
                 for importing_service in export.importing_services:
                     logger.info(f"\t{importing_service}")
-
-    @staticmethod
-    def _enrich_service_name(
-        exports_enriched: List[StackExport], stack_infos: List[StackInfo]
-    ) -> Iterable[StackExport]:
-        grouped_by_stack = {}
-        for stack_info in stack_infos:
-            if stack_info.service_name is not None:
-                grouped_by_stack[stack_info.stack_name] = stack_info.service_name
-
-        for export in exports_enriched:
-            service_name = grouped_by_stack[export.exporting_stack_name]
-            importing_services = [
-                grouped_by_stack[importing_stack]
-                for importing_stack in export.importing_stacks
-                if grouped_by_stack.get(importing_stack) is not None
-            ]
-            yield StackExport(
-                export_name=export.export_name,
-                exporting_stack_name=export.exporting_stack_name,
-                export_value=export.export_value,
-                export_service=service_name,
-                importing_stacks=export.importing_stacks,
-                importing_services=importing_services,
-            )
 
     @staticmethod
     def _print_stack_infos(stack_infos: List[StackInfo]) -> None:
@@ -250,15 +210,15 @@ class InfraGraphExporter:
         logger.debug(f"node_set_leafs: {node_set_leafs}")
 
         for exporting_stack_name in node_set_important:
-            node = exporting_stack_name.replace(f"{self._get_stack_prefix()}-", "")
+            node = exporting_stack_name.replace(f"{self.stack_prefix}-", "")
             stacks_graph.node(node, _attributes={"fillcolor": "orange"})
 
         for exporting_stack_name in node_set_leafs:
-            node = exporting_stack_name.replace(f"{self._get_stack_prefix()}-", "")
+            node = exporting_stack_name.replace(f"{self.stack_prefix}-", "")
             stacks_graph.node(node, _attributes={"fillcolor": "green"})
 
         for exporting_stack_name, importing_stack in edge_set:
-            from_node = exporting_stack_name.replace(f"{self._get_stack_prefix()}-", "")
+            from_node = exporting_stack_name.replace(f"{self.stack_prefix}-", "")
             to_node = importing_stack.replace(f"{self.project_name}-{self.env}-", "")
             stacks_graph.edge(from_node, to_node)
 
@@ -269,9 +229,7 @@ class InfraGraphExporter:
             for parameter in stack.parameters:
                 if parameter.external_dependency is not None:
                     external_service_name = parameter.external_dependency.service_name
-                    stack_name = stack.stack_name.replace(
-                        f"{self._get_stack_prefix()}-", ""
-                    )
+                    stack_name = stack.stack_name.replace(f"{self.stack_prefix}-", "")
                     node_set_external.add(external_service_name)
                     edge_set_external.add((external_service_name, stack_name))
 
@@ -284,194 +242,3 @@ class InfraGraphExporter:
         stacks_graph.render(
             format="png", filename=f"{self.output_folder}/export-stacks.gv"
         )
-
-    @file_cached(".gather_stacks.cache")
-    def _gather_stacks(self) -> List[StackInfo]:
-        return list(self._gather_stacks_gen())
-
-    def _gather_stacks_gen(self) -> Iterable[StackInfo]:
-        paginator = self.cfn_client.get_paginator("list_stacks")
-        # self.cfn_client.list_stacks() # TODO remove
-        pages = paginator.paginate(
-            StackStatusFilter=[
-                "CREATE_IN_PROGRESS",
-                "CREATE_COMPLETE",
-                "ROLLBACK_COMPLETE",
-                "DELETE_FAILED",
-                "UPDATE_IN_PROGRESS",
-                "UPDATE_COMPLETE",
-                "UPDATE_ROLLBACK_FAILED",
-                "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
-                "UPDATE_ROLLBACK_COMPLETE",
-                "REVIEW_IN_PROGRESS",
-            ]
-        )
-
-        for page in pages:
-            stacks = page["StackSummaries"]
-            logger.debug(f"Nr of stacks in page: {len(stacks)}")
-            for stack in stacks:
-                stack_name = stack["StackName"]
-                if stack_name.startswith(f"{self.project_name}-{self.env}"):
-                    yield self._gather_stack_info(stack_name)
-                    time.sleep(0.1)  # avoid throttling
-
-    def _gather_stack_info(self, stack_name):
-        stack_detail_results = self.cfn_client.describe_stacks(StackName=stack_name)
-        stack_template_details_result = self.cfn_client.get_template_summary(
-            StackName=stack_name
-        )
-        stack_details = stack_detail_results["Stacks"][0]
-        stack_tags = stack_details["Tags"]
-        logger.debug(f"stack: {stack_name}")
-
-        parameters = self._extract_parameters(
-            stack_details, stack_template_details_result
-        )
-        service_name = self.service_tag_search.search(stack_tags)
-        if service_name is None:
-            service_name = self.service_tag2_search.search(stack_tags)
-        return StackInfo(
-            stack_name=stack_name, service_name=service_name, parameters=parameters,
-        )
-
-    @staticmethod
-    def _extract_parameters(
-        stack_details: Dict, stack_template_details: Dict
-    ) -> List[StackParameter]:
-        params: Dict[str, StackParameter] = {}
-
-        if "Parameters" not in stack_details:
-            return []
-
-        for parameter in stack_details["Parameters"]:
-            name = parameter["ParameterKey"]
-            value = parameter["ParameterValue"]
-            params[name] = StackParameter(name=name, value=value)
-
-        for parameter in stack_template_details["Parameters"]:
-            # print(parameter)
-            name = parameter["ParameterKey"]
-            description = parameter.get("Description")
-            # TODO exceptions
-            external_dep = None
-            if description and "|" in description:
-                metadata_part = description.split("|")[1].strip()
-                metadata = list(
-                    [row for row in csv.reader([metadata_part], delimiter=",")]
-                )[0]
-                metadata_transformed = {
-                    metadata_entry.split("=")[0]: metadata_entry.split("=")[1]
-                    for metadata_entry in metadata
-                }
-                external_dep = ExternalDependency(
-                    team_name=metadata_transformed["team"],
-                    service_name=metadata_transformed["service"],
-                )
-                logger.info(f"{Fore.YELLOW}{external_dep}")
-
-            params[name] = StackParameter(
-                name=params[name].name,
-                value=params[name].value,
-                description=description,
-                external_dependency=external_dep,
-            )
-
-        return list(params.values())
-
-    @file_cached(".gather_and_filter_exports.cache")
-    def _gather_and_filter_exports(self, stacks: List[StackInfo]) -> List[StackExport]:
-        exports_raw = self._gather_raw_exports()
-        exports = list(self._extract_exports(exports_raw))
-        logger.info(f"{Style.BRIGHT}Number of exports gathered: {len(exports)}")
-        exports_enriched = list(self._match_exports_with_imports(exports))
-        logger.info(
-            f"{Style.BRIGHT}Number of import-enriched exports gathered: {len(exports_enriched)}"
-        )
-        exports_with_service_names = list(
-            self._enrich_service_name(exports_enriched, stacks)
-        )
-        logger.info(
-            f"{Style.BRIGHT}Number of import-enriched exports with service names gathered: {len(exports_with_service_names)}"
-        )
-        return exports_with_service_names
-
-    def _get_stack_prefix(self) -> str:
-        return f"{self.project_name}-{self.env}"
-
-    def _extract_exports(self, raw_exports: List[Dict]) -> Iterable[StackExport]:
-        return [
-            extracted_export
-            for export in raw_exports
-            if (extracted_export := self._extract_export(export))
-        ]
-
-    def _extract_export(self, raw_export: Dict):
-        stack_id = raw_export["ExportingStackId"]
-        match = re.search(".*/(.*)/.*", stack_id)
-        if match:
-            stack = match.group(1)
-            name = raw_export["Name"]
-            value = raw_export["Value"]
-
-            if stack.startswith(self._get_stack_prefix()):
-                return StackExport(
-                    export_name=name, exporting_stack_name=stack, export_value=value
-                )
-
-    @file_cached(".gather_raw_exports.cache")
-    def _gather_raw_exports(self) -> List[Dict[Any, Any]]:
-        should_paginate = True
-        next_token = None
-        exports: List[Dict[Any, Any]] = []
-        logger.debug("Gather exports started")
-        while should_paginate:
-            logger.debug("Gather exports")  # TODO investigate pagniators
-            result = (
-                self.cfn_client.list_exports(NextToken=next_token)
-                if next_token
-                else self.cfn_client.list_exports()
-            )
-            next_token = result.get("NextToken", None)
-            exports.extend(result["Exports"])
-            if not next_token:
-                should_paginate = False
-        logger.debug("Gathered all exports")
-        return exports
-
-    def _match_exports_with_imports(
-        self, exports: List[StackExport]
-    ) -> Iterable[StackExport]:
-        for export in exports:
-            export_name = export.export_name
-            should_paginate = True
-            next_token = None
-            imports: List[str] = []
-            try:
-                while should_paginate:
-                    logger.debug(
-                        f"Gather import stacks for export name: {export_name}"
-                    )  # TODO investigate pagniators
-                    result = (
-                        self.cfn_client.list_imports(
-                            ExportName=export_name, NextToken=next_token
-                        )
-                        if next_token
-                        else self.cfn_client.list_imports(ExportName=export_name)
-                    )
-                    next_token = result.get("NextToken", None)
-                    imports.extend(result["Imports"])
-                    if not next_token:
-                        should_paginate = False
-            except ClientError as e:
-                if "is not imported by any stack" in str(e):
-                    continue
-                else:
-                    raise
-
-            yield StackExport(
-                export_name=export_name,
-                exporting_stack_name=export.exporting_stack_name,
-                export_value=export.export_value,
-                importing_stacks=imports,
-            )

@@ -26,6 +26,11 @@ repos:
     -   id: mypy
         args: [--ignore-missing-imports]
         additional_dependencies: ["pydantic"]
+-   repo: https://github.com/humitos/mirrors-autoflake.git
+    rev: v1.3
+    hooks:
+    - id: autoflake
+      args: ['--in-place', '--remove-all-unused-imports', '--remove-unused-variable']
 -   repo: https://gitlab.com/pycqa/flake8
     rev: 3.8.3
     hooks:
