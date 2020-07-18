@@ -32,8 +32,8 @@ class ManualDependency(BaseModel):
     service: str
 
 
-def load_config() -> InfraGraphConfig:
-    hocon_conf = ConfigFactory.parse_file("config.hocon")
+def load_config(config_path: str) -> InfraGraphConfig:
+    hocon_conf = ConfigFactory.parse_file(config_path)
     config_dict = json.loads(HOCONConverter.to_json(hocon_conf.get("infraGraph")))
     return InfraGraphConfig(**config_dict)
 

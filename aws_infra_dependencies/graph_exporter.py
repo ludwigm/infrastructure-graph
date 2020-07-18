@@ -38,13 +38,21 @@ IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
 
 class InfraGraphExporter:
     config: InfraGraphConfig
+    output_folder: str
     env: str
     project_name: str
     cfn_client: cloudformation.Client
 
-    def __init__(self, env: str, project_name: Optional[str] = None):
-        self.config = load_config()
+    def __init__(
+        self,
+        env: str,
+        project_name: Optional[str] = None,
+        config_path="./config.hocon",
+        output_folder="./output",
+    ):
+        self.config = load_config(config_path)
         self.cfn_client = boto3.client("cloudformation")
+        self.output_folder = output_folder
         self.env = env
         self.project_name = (
             project_name if project_name else self.config.default_project
@@ -65,7 +73,7 @@ class InfraGraphExporter:
         self._print_export_infos(imported_exports)
         self._visualize(imported_exports, stack_infos)
         self._visualize_services(imported_exports, stack_infos)
-        logger.info("\nGraph exports finished in ./output folder")
+        logger.info(f"\nGraph exports finished in {self.output_folder} folder")
 
     def _print_export_infos(self, exports: List[StackExport]):
         logger.info("\n")
@@ -195,7 +203,9 @@ class InfraGraphExporter:
                 stacks_graph.node(upstream_service, _attributes={"fillcolor": "blue"})
                 stacks_graph.edge(service_name, upstream_service)
 
-        stacks_graph.render(format="png", filename="output/export-services.gv")
+        stacks_graph.render(
+            format="png", filename=f"{self.output_folder}/export-services.gv"
+        )
 
     def _visualize(
         self, exports_enriched: List[StackExport], stack_infos: List[StackInfo]
@@ -255,7 +265,9 @@ class InfraGraphExporter:
         for from_node, to_node in edge_set_external:
             stacks_graph.edge(from_node, to_node)
 
-        stacks_graph.render(format="png", filename="output/export-stacks.gv")
+        stacks_graph.render(
+            format="png", filename=f"{self.output_folder}/export-stacks.gv"
+        )
 
     def _gather_stacks(self) -> Iterable[StackInfo]:
         paginator = self.cfn_client.get_paginator("list_stacks")
