@@ -32,5 +32,5 @@ class StackExport:
     export_value: str
     exporting_stack_name: str
     importing_stacks: List[str] = field(default_factory=list)
-    export_service: str = Optional[None]
+    export_service: Optional[str] = None
     importing_services: List[str] = field(default_factory=list)

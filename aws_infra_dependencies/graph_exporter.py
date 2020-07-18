@@ -7,6 +7,7 @@ import csv
 import time
 import logging
 from typing import Any, Dict, List, Iterable, Optional, DefaultDict
+from pathlib import Path
 from collections import defaultdict
 
 # Third party
@@ -24,6 +25,7 @@ from aws_infra_dependencies.model import (
     StackParameter,
     ExternalDependency,
 )
+from aws_infra_dependencies.utils import file_cached
 from aws_infra_dependencies.config import InfraGraphConfig, load_config
 
 init(autoreset=True)
@@ -63,10 +65,12 @@ class InfraGraphExporter:
             "[?Key==`Service`]|[0]|Value"
         )  # TODO align in infra
 
-    def export(self):
-        stack_infos = list(self._gather_stacks())
+    def export(self, refresh: bool):
+        if refresh:
+            self.delete_caches()
+        stack_infos = self._gather_stacks()
         self._print_stack_infos(stack_infos)
-        exports = list(self._gather_and_filter_exports(stack_infos))
+        exports = self._gather_and_filter_exports(stack_infos)
         imported_exports = [
             export for export in exports if len(export.importing_stacks) > 0
         ]
@@ -75,7 +79,17 @@ class InfraGraphExporter:
         self._visualize_services(imported_exports, stack_infos)
         logger.info(f"\nGraph exports finished in {self.output_folder} folder")
 
-    def _print_export_infos(self, exports: List[StackExport]):
+    @staticmethod
+    def delete_caches():
+        files = (
+            x for x in Path(".").iterdir() if x.is_file() and str(x).endswith(".cache")
+        )
+        for file in files:
+            logger.info(f"Removing {str(file)}")
+            file.unlink()
+
+    @staticmethod
+    def _print_export_infos(exports: List[StackExport]) -> None:
         logger.info("\n")
         logger.info(f"{Fore.BLUE}Export details:")
         for export in exports:
@@ -101,8 +115,9 @@ class InfraGraphExporter:
                 for importing_service in export.importing_services:
                     logger.info(f"\t{importing_service}")
 
+    @staticmethod
     def _enrich_service_name(
-        self, exports_enriched: List[StackExport], stack_infos: List[StackInfo]
+        exports_enriched: List[StackExport], stack_infos: List[StackInfo]
     ) -> Iterable[StackExport]:
         grouped_by_stack = {}
         for stack_info in stack_infos:
@@ -125,7 +140,8 @@ class InfraGraphExporter:
                 importing_services=importing_services,
             )
 
-    def _print_stack_infos(self, stack_infos: List[StackInfo]):
+    @staticmethod
+    def _print_stack_infos(stack_infos: List[StackInfo]) -> None:
         logger.info("\n")
         logger.info(f"{Fore.BLUE}Stacks without service name:")
         grouped_by_service: DefaultDict[str, List[str]] = defaultdict(list)
@@ -160,7 +176,7 @@ class InfraGraphExporter:
         self,
         exports_with_service_names: List[StackExport],
         stack_infos: List[StackInfo],
-    ):
+    ) -> None:
         stacks_graph = Digraph(
             "StacksGraph",
             node_attr={"shape": "box", "style": "filled", "fillcolor": "grey"},
@@ -209,7 +225,7 @@ class InfraGraphExporter:
 
     def _visualize(
         self, exports_enriched: List[StackExport], stack_infos: List[StackInfo]
-    ):  # TODO already filter before
+    ) -> None:  # TODO already filter before
         stacks_graph = Digraph(
             "StacksGraph",
             node_attr={"shape": "box", "style": "filled", "fillcolor": "grey"},
@@ -269,7 +285,11 @@ class InfraGraphExporter:
             format="png", filename=f"{self.output_folder}/export-stacks.gv"
         )
 
-    def _gather_stacks(self) -> Iterable[StackInfo]:
+    @file_cached(".gather_stacks.cache")
+    def _gather_stacks(self) -> List[StackInfo]:
+        return list(self._gather_stacks_gen())
+
+    def _gather_stacks_gen(self) -> Iterable[StackInfo]:
         paginator = self.cfn_client.get_paginator("list_stacks")
         # self.cfn_client.list_stacks() # TODO remove
         pages = paginator.paginate(
@@ -293,31 +313,31 @@ class InfraGraphExporter:
             for stack in stacks:
                 stack_name = stack["StackName"]
                 if stack_name.startswith(f"{self.project_name}-{self.env}"):
-                    stack_detail_results = self.cfn_client.describe_stacks(
-                        StackName=stack_name
-                    )
-                    stack_template_details_result = self.cfn_client.get_template_summary(
-                        StackName=stack_name
-                    )
-                    stack_details = stack_detail_results["Stacks"][0]
-                    stack_tags = stack_details["Tags"]
-                    logger.debug(f"stack: {stack_name}")
-
-                    parameters = self._extract_parameters(
-                        stack_details, stack_template_details_result
-                    )
-                    service_name = self.service_tag_search.search(stack_tags)
-                    if service_name is None:
-                        service_name = self.service_tag2_search.search(stack_tags)
-                    yield StackInfo(
-                        stack_name=stack_name,
-                        service_name=service_name,
-                        parameters=parameters,
-                    )
+                    yield self._gather_stack_info(stack_name)
                     time.sleep(0.1)  # avoid throttling
 
+    def _gather_stack_info(self, stack_name):
+        stack_detail_results = self.cfn_client.describe_stacks(StackName=stack_name)
+        stack_template_details_result = self.cfn_client.get_template_summary(
+            StackName=stack_name
+        )
+        stack_details = stack_detail_results["Stacks"][0]
+        stack_tags = stack_details["Tags"]
+        logger.debug(f"stack: {stack_name}")
+
+        parameters = self._extract_parameters(
+            stack_details, stack_template_details_result
+        )
+        service_name = self.service_tag_search.search(stack_tags)
+        if service_name is None:
+            service_name = self.service_tag2_search.search(stack_tags)
+        return StackInfo(
+            stack_name=stack_name, service_name=service_name, parameters=parameters,
+        )
+
+    @staticmethod
     def _extract_parameters(
-        self, stack_details: Dict, stack_template_details: Dict
+        stack_details: Dict, stack_template_details: Dict
     ) -> List[StackParameter]:
         params: Dict[str, StackParameter] = {}
 
@@ -359,6 +379,7 @@ class InfraGraphExporter:
 
         return list(params.values())
 
+    @file_cached(".gather_and_filter_exports.cache")
     def _gather_and_filter_exports(self, stacks: List[StackInfo]) -> List[StackExport]:
         exports_raw = self._gather_raw_exports()
         exports = list(self._extract_exports(exports_raw))
@@ -379,19 +400,26 @@ class InfraGraphExporter:
         return f"{self.project_name}-{self.env}"
 
     def _extract_exports(self, raw_exports: List[Dict]) -> Iterable[StackExport]:
-        for export in raw_exports:
-            stack_id = export["ExportingStackId"]
-            match = re.search(".*/(.*)/.*", stack_id)
-            if match:
-                stack = match.group(1)
-                name = export["Name"]
-                value = export["Value"]
+        return [
+            extracted_export
+            for export in raw_exports
+            if (extracted_export := self._extract_export(export))
+        ]
 
-                if stack.startswith(self._get_stack_prefix()):
-                    yield StackExport(
-                        export_name=name, exporting_stack_name=stack, export_value=value
-                    )
+    def _extract_export(self, raw_export: Dict):
+        stack_id = raw_export["ExportingStackId"]
+        match = re.search(".*/(.*)/.*", stack_id)
+        if match:
+            stack = match.group(1)
+            name = raw_export["Name"]
+            value = raw_export["Value"]
 
+            if stack.startswith(self._get_stack_prefix()):
+                return StackExport(
+                    export_name=name, exporting_stack_name=stack, export_value=value
+                )
+
+    @file_cached(".gather_raw_exports.cache")
     def _gather_raw_exports(self) -> List[Dict[Any, Any]]:
         should_paginate = True
         next_token = None

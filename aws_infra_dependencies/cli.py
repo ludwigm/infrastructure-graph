@@ -35,10 +35,20 @@ IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
     required=False,
     help="Project/Team name is expected of part of the resource name and need to be specified here or taken from config",
 )
-def export_infra_graph(env: str, project_name: str):
+@click.option(
+    "-r",
+    "--refresh",
+    "refresh",
+    is_flag=True,
+    default=False,
+    required=False,
+    type=bool,
+    help="In case of disc cached result clear them beforehand",
+)
+def export_infra_graph(env: str, project_name: str, refresh: bool):
     logger.info(f"{Fore.BLUE}Starting infra export for {env}. Can take some minutes.")
     exporter = InfraGraphExporter(env, project_name)
-    exporter.export()
+    exporter.export(refresh)
 
 
 if __name__ == "__main__":
