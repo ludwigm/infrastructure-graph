@@ -2,6 +2,10 @@
 import os
 import pickle
 import logging
+from typing import List
+
+# Third party
+import jmespath
 
 logger = logging.getLogger()
 logging.basicConfig(
@@ -11,7 +15,8 @@ logging.basicConfig(
 
 def file_cached(cachefile):
     """
-    A function that creates a decorator which will use "cachefile" for caching the results of the decorated function "fn".
+    A function that creates a decorator which will use "cachefile" for caching
+    the results of the decorated function "fn". Does not regard function params
     """
 
     def decorator(fn):
@@ -35,3 +40,7 @@ def file_cached(cachefile):
         return wrapped
 
     return decorator
+
+
+def build_tag_search_patterns(tags: List[str]):
+    return [jmespath.compile(f"[?Key==`{tag}`]|[0]|Value") for tag in tags]

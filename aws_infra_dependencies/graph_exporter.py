@@ -54,7 +54,11 @@ class InfraGraphExporter:
             project_name if project_name else self.config.default_project
         )
         self.stack_prefix = f"{self.project_name}-{self.env}"
-        self.data_extractor = DataExtractor(self.stack_prefix)
+        self.data_extractor = DataExtractor(
+            self.stack_prefix,
+            service_tags=self.config.service_tags,
+            component_tags=self.config.component_tags,
+        )
 
     def export(self, refresh: bool):
         if refresh:
@@ -110,14 +114,12 @@ class InfraGraphExporter:
     def _print_stack_infos(stack_infos: List[StackInfo]) -> None:
         logger.info("\n")
         logger.info(f"{Fore.BLUE}Stacks without service name:")
-        grouped_by_service: DefaultDict[str, List[str]] = defaultdict(list)
+        grouped_by_service: DefaultDict[str, List[StackInfo]] = defaultdict(list)
         for stack_info in stack_infos:
             if stack_info.service_name is None:
                 logger.info(stack_info)
             else:
-                grouped_by_service[stack_info.service_name].append(
-                    stack_info.stack_name
-                )
+                grouped_by_service[stack_info.service_name].append(stack_info)
 
         logger.info("\n")
 
@@ -125,7 +127,7 @@ class InfraGraphExporter:
         for service, stacks in grouped_by_service.items():
             logger.info(f"{Style.BRIGHT}\t{service}:")
             for stack in stacks:
-                logger.info(f"\t\t{stack}")
+                logger.info(f"\t\t{stack.stack_name} [{stack.component_name}]")
 
         logger.info("\n")
 

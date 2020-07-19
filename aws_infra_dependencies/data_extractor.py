@@ -6,11 +6,10 @@ import re
 import csv
 import time
 import logging
-from typing import Any, Dict, List, Iterable
+from typing import Any, Dict, List, Iterable, Optional
 
 # Third party
 import boto3
-import jmespath
 import coloredlogs
 from colorama import Fore, Style
 from botocore.exceptions import ClientError
@@ -23,7 +22,7 @@ from aws_infra_dependencies.model import (
     StackParameter,
     ExternalDependency,
 )
-from aws_infra_dependencies.utils import file_cached
+from aws_infra_dependencies.utils import file_cached, build_tag_search_patterns
 
 logger = logging.getLogger()
 logging.basicConfig(
@@ -40,14 +39,13 @@ class DataExtractor:
     stack_prefix: str
     cfn_client: cloudformation.Client
 
-    def __init__(self, stack_prefix: str) -> None:
+    def __init__(
+        self, stack_prefix: str, service_tags: List[str], component_tags: List[str]
+    ) -> None:
         self.stack_prefix = stack_prefix
         self.cfn_client = boto3.client("cloudformation")
-        # Replace with your own tag you want to group on to aggregate on higher level
-        self.service_tag_search = jmespath.compile("[?Key==`ServiceName`]|[0]|Value")
-        self.service_tag2_search = jmespath.compile(
-            "[?Key==`Service`]|[0]|Value"
-        )  # TODO align in infra
+        self.service_tag_search_patterns = build_tag_search_patterns(service_tags)
+        self.component_tag_search_patterns = build_tag_search_patterns(component_tags)
 
     @file_cached(".gather_and_filter_exports.cache")
     def gather_and_filter_exports(self, stacks: List[StackInfo]) -> List[StackExport]:
@@ -109,11 +107,33 @@ class DataExtractor:
         parameters = self._extract_parameters(
             stack_details, stack_template_details_result
         )
-        service_name = self.service_tag_search.search(stack_tags)
-        if service_name is None:
-            service_name = self.service_tag2_search.search(stack_tags)
+        service_name = self._get_service_name(stack_tags)
+        component_name = self._get_component_name(stack_tags)
         return StackInfo(
-            stack_name=stack_name, service_name=service_name, parameters=parameters,
+            stack_name=stack_name,
+            service_name=service_name,
+            component_name=component_name,
+            parameters=parameters,
+        )
+
+    def _get_service_name(self, stack_tags) -> Optional[str]:
+        return next(
+            (
+                result
+                for pattern in self.service_tag_search_patterns
+                if (result := pattern.search(stack_tags)) is not None
+            ),
+            None,
+        )
+
+    def _get_component_name(self, stack_tags) -> Optional[str]:
+        return next(
+            (
+                result
+                for pattern in self.component_tag_search_patterns
+                if (result := pattern.search(stack_tags)) is not None
+            ),
+            None,
         )
 
     def _gather_raw_exports(self) -> List[Dict[Any, Any]]:

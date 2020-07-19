@@ -22,7 +22,8 @@ class StackParameter:
 @dataclass
 class StackInfo:
     stack_name: str
-    service_name: str
+    service_name: Optional[str]
+    component_name: Optional[str]
     parameters: List[StackParameter] = field(default_factory=list)  # TODO
 
 

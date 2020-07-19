@@ -12,11 +12,17 @@ from pyhocon.config_parser import ConfigFactory
 
 class InfraGraphConfig(BaseModel):
     default_project: str
+    service_tags: List[str]
+    component_tags: List[str]
     projects: Dict[str, ProjectConfig]
 
     class Config:
         allow_population_by_field_name = True
-        fields = {"default_project": "defaultProject"}
+        fields = {
+            "default_project": "defaultProject",
+            "service_tags": "serviceTags",
+            "component_tags": "componentTags",
+        }
 
 
 class ProjectConfig(BaseModel):

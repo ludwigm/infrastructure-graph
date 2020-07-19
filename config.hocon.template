@@ -1,5 +1,7 @@
 infraGraph {
     defaultProject = projectName
+    serviceTags = ["Service", "ServiceName"]
+    componentTags = ["Component", "ComponentName"]
     projects {
         projectName {
            downstreamDependencies {
