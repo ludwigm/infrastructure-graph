@@ -15,7 +15,7 @@ from graphviz import Digraph
 # First party
 from aws_infra_dependencies.model import StackInfo, StackExport
 from aws_infra_dependencies.config import InfraGraphConfig, load_config
-from aws_infra_dependencies.data_extractor import DataExtractor
+from aws_infra_dependencies.data_extractor import DataExtractor, IDataExtractor
 
 init(autoreset=True)
 
@@ -34,7 +34,7 @@ IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
 
 class InfraGraphExporter:
     config: InfraGraphConfig
-    data_extractor: DataExtractor
+    data_extractor: IDataExtractor
     output_folder: str
     env: str
     project_name: str
@@ -44,8 +44,9 @@ class InfraGraphExporter:
         self,
         env: str,
         project_name: Optional[str] = None,
-        config_path="./config.hocon",
-        output_folder="./output",
+        config_path: str = "./config.hocon",
+        output_folder: str = "./output",
+        data_extractor: Optional[IDataExtractor] = None,
     ):
         self.config = load_config(config_path)
         self.output_folder = output_folder
@@ -54,11 +55,14 @@ class InfraGraphExporter:
             project_name if project_name else self.config.default_project
         )
         self.stack_prefix = f"{self.project_name}-{self.env}"
-        self.data_extractor = DataExtractor(
-            self.stack_prefix,
-            service_tags=self.config.service_tags,
-            component_tags=self.config.component_tags,
-        )
+        if not data_extractor:
+            self.data_extractor = DataExtractor(
+                self.stack_prefix,
+                service_tags=self.config.service_tags,
+                component_tags=self.config.component_tags,
+            )
+        else:
+            self.data_extractor = data_extractor
 
     def export(self, refresh: bool):
         if refresh:
@@ -70,7 +74,7 @@ class InfraGraphExporter:
             export for export in exports if len(export.importing_stacks) > 0
         ]
         self._print_export_infos(imported_exports)
-        self._visualize(imported_exports, stack_infos)
+        self._visualize_stacks(imported_exports, stack_infos)
         self._visualize_services(imported_exports, stack_infos)
         logger.info(f"\nGraph exports finished in {self.output_folder} folder")
 
@@ -223,7 +227,8 @@ class InfraGraphExporter:
             format="png", filename=f"{self.output_folder}/export-services.gv"
         )
 
-    def _visualize(
+    # TODO try grouping by services where possible with subgraphs
+    def _visualize_stacks(
         self, exports_enriched: List[StackExport], stack_infos: List[StackInfo]
     ) -> None:  # TODO already filter before
         stacks_graph = Digraph(

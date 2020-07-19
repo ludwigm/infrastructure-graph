@@ -1,0 +1,20 @@
+infraGraph {
+    defaultProject = testTeam
+    serviceTags = ["Service"]
+    componentTags = ["Component"]
+    projects {
+        testTeam {
+           downstreamDependencies {
+                api = [
+                    {
+                        team: ExternalServiceTeam
+                        service: ExternalService
+                    }
+                ]
+           }
+           internalManualDependencies {
+
+           }
+        }
+    }
+}

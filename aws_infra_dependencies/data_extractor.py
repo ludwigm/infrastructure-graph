@@ -6,7 +6,7 @@ import re
 import csv
 import time
 import logging
-from typing import Any, Dict, List, Iterable, Optional
+from typing import Any, Dict, List, Iterable, Optional, Protocol
 
 # Third party
 import boto3
@@ -33,6 +33,14 @@ coloredlogs.install(
     fmt="[%(levelname)s] %(message)s",
     logger=logger,
 )
+
+
+class IDataExtractor(Protocol):
+    def gather_and_filter_exports(self, stacks: List[StackInfo]) -> List[StackExport]:
+        ...
+
+    def gather_stacks(self) -> List[StackInfo]:
+        ...
 
 
 class DataExtractor:
