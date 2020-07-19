@@ -2,3 +2,4 @@ output/
 config.hocon
 **egg-info
 *.pyc
+*.cache

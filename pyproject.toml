@@ -14,9 +14,21 @@ jmespath = "^0.9.5"
 colorama = "^0.4.3"
 pyhocon = "^0.3.54"
 pydantic = "^1.4"
+coloredlogs = "^14.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
+pyexpect = "^1.0.20"
+pytest-mocha = "^0.4.0"
+nox = "^2020.5.24"
+black = "^19.10b0"
+pytest-black = "^0.3.10"
+coverage = "^5.2"
+pytest-cov = "^2.10.0"
+pytest-env = "^0.6.2"
+pytest-flake8 = "^1.0.6"
+pytest-mccabe = "^1.0"
+pytest-mypy = "^0.6.2"
 
 [tool.poetry.scripts]
 export-graph = "aws_infra_dependencies.cli:export_infra_graph"
