@@ -20,15 +20,23 @@ class InfraGraphConfig(BaseModel):
 
 
 class ProjectConfig(BaseModel):
-    upstream_dependencies: Dict[str, List[ManualDependency]]
+    downstream_dependencies: Dict[str, List[ManualDependency]]
+    internal_manual_dependencies: Dict[str, List[ManualInternalDependency]]
 
     class Config:
         allow_population_by_field_name = True
-        fields = {"upstream_dependencies": "upstreamDependencies"}
+        fields = {
+            "downstream_dependencies": "downstreamDependencies",
+            "internal_manual_dependencies": "internalManualDependencies",
+        }
 
 
 class ManualDependency(BaseModel):
     team: str
+    service: str
+
+
+class ManualInternalDependency(BaseModel):
     service: str
 
 

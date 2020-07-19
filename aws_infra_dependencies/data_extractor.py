@@ -11,11 +11,10 @@ from typing import Any, Dict, List, Iterable
 # Third party
 import boto3
 import jmespath
+import coloredlogs
 from colorama import Fore, Style
 from botocore.exceptions import ClientError
 from boto3_type_annotations import cloudformation
-
-import coloredlogs
 
 # First party
 from aws_infra_dependencies.model import (
@@ -30,8 +29,11 @@ logger = logging.getLogger()
 logging.basicConfig(
     format="[%(levelname)s] %(message)s", level=os.getenv("LOG_LEVEL", "INFO")
 )
-coloredlogs.install(level=os.getenv("LOG_LEVEL", "INFO"), fmt="[%(levelname)s] %(message)s", logger=logger)
-
+coloredlogs.install(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    fmt="[%(levelname)s] %(message)s",
+    logger=logger,
+)
 
 
 class DataExtractor:

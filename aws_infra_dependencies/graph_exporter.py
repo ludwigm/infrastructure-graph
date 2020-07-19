@@ -7,9 +7,8 @@ from typing import List, Optional, DefaultDict
 from pathlib import Path
 from collections import defaultdict
 
-import coloredlogs
-
 # Third party
+import coloredlogs
 from colorama import Fore, Style, init
 from graphviz import Digraph
 
@@ -24,7 +23,11 @@ logger = logging.getLogger()
 logging.basicConfig(
     format="[%(levelname)s] %(message)s", level=os.getenv("LOG_LEVEL", "INFO")
 )
-coloredlogs.install(level=os.getenv("LOG_LEVEL", "INFO"), fmt="[%(levelname)s] %(message)s", logger=logger)
+coloredlogs.install(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    fmt="[%(levelname)s] %(message)s",
+    logger=logger,
+)
 
 IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
 
@@ -144,7 +147,9 @@ class InfraGraphExporter:
             "StacksGraph",
             node_attr={"shape": "box", "style": "filled", "fillcolor": "grey"},
         )
-        stacks_graph.attr(rankdir="LR", label="Service Dependencies", labelloc="t", fontsize='20')
+        stacks_graph.attr(
+            rankdir="LR", label="Service Dependencies", labelloc="t", fontsize="20"
+        )
         edge_set = set()
         node_set_internal = set()
         for export in exports_with_service_names:
@@ -155,6 +160,7 @@ class InfraGraphExporter:
                     node_set_internal.add(importing_service)
 
         for node in node_set_internal:
+            # TODO does this really work?
             stacks_graph.node(node, label=f'<<font point-size="17">{node}</font>>')
 
         for export_service, importing_service in edge_set:
@@ -172,22 +178,44 @@ class InfraGraphExporter:
                     node_set_external.add(external_service_name)
                     edge_set_external.add((external_service_name, stack.service_name))
 
-        for node in node_set_external: # TODO add team name
-            stacks_graph.node(node, _attributes={"fillcolor": "tomato" }, label=f'<<font point-size="19">{node}</font>>')
+        for node in node_set_external:  # TODO add team name
+            stacks_graph.node(
+                node,
+                _attributes={"fillcolor": "tomato"},
+                label=f'<<font point-size="19">{node}</font>>',
+            )
 
         for from_node, to_node in edge_set_external:
             stacks_graph.edge(from_node, to_node)
 
         # TODO deduplicate
-        upstream_dependencies = self.config.projects[
+        downstream_dependencies = self.config.projects[
             self.project_name
-        ].upstream_dependencies
+        ].downstream_dependencies
 
-        for service_name, dependencies in upstream_dependencies.items():
+        internal_manual_dependencies = self.config.projects[
+            self.project_name
+        ].internal_manual_dependencies
+
+        for service_name, dependencies in downstream_dependencies.items():
             for dependency in dependencies:
-                upstream_service = dependency.service
-                stacks_graph.node(upstream_service, _attributes={"fillcolor": "skyblue"}, label=f'<<font point-size="19">{upstream_service}</font>>')
-                stacks_graph.edge(service_name, upstream_service)
+                downstream_service = dependency.service
+                stacks_graph.node(
+                    downstream_service,
+                    _attributes={"fillcolor": "skyblue"},
+                    label=f'<<font point-size="19">{downstream_service}</font>>',
+                )
+                stacks_graph.edge(service_name, downstream_service)
+
+        for service_name, internal_dependencies in internal_manual_dependencies.items():
+            for internal_dependency in internal_dependencies:
+                upstream_service = internal_dependency.service
+                stacks_graph.node(
+                    upstream_service,
+                    _attributes={"fillcolor": "grey68", "style": "dotted, filled"},
+                    label=f'<<font point-size="17">{upstream_service}</font>>',
+                )
+                stacks_graph.edge(upstream_service, service_name)
 
         stacks_graph.render(
             format="png", filename=f"{self.output_folder}/export-services.gv"
@@ -200,7 +228,9 @@ class InfraGraphExporter:
             "StacksGraph",
             node_attr={"shape": "box", "style": "filled", "fillcolor": "grey"},
         )
-        stacks_graph.attr(rankdir="LR", label="Stack Dependencies", labelloc="t", fontsize='20')
+        stacks_graph.attr(
+            rankdir="LR", label="Stack Dependencies", labelloc="t", fontsize="20"
+        )
         edge_set = set()
         node_set_important = set()
         node_set_all = set()

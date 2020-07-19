@@ -2,13 +2,20 @@ infraGraph {
     defaultProject = projectName
     projects {
         projectName {
-           upstreamDependencies {
+           downstreamDependencies {
                 serviceName = [
                     {
                         team: externalTeamName
                         service: externalServiceName
                     },
                 ]
+           }
+           internalManualDependencies {
+               internalService = [
+                   {
+                       service: internalService2 // upstream
+                   }
+               ],
            }
         }
     }
