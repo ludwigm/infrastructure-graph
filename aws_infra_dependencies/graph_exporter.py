@@ -7,6 +7,8 @@ from typing import List, Optional, DefaultDict
 from pathlib import Path
 from collections import defaultdict
 
+import coloredlogs
+
 # Third party
 from colorama import Fore, Style, init
 from graphviz import Digraph
@@ -22,6 +24,7 @@ logger = logging.getLogger()
 logging.basicConfig(
     format="[%(levelname)s] %(message)s", level=os.getenv("LOG_LEVEL", "INFO")
 )
+coloredlogs.install(level=os.getenv("LOG_LEVEL", "INFO"), fmt="[%(levelname)s] %(message)s", logger=logger)
 
 IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
 
@@ -141,11 +144,18 @@ class InfraGraphExporter:
             "StacksGraph",
             node_attr={"shape": "box", "style": "filled", "fillcolor": "grey"},
         )
+        stacks_graph.attr(rankdir="LR", label="Service Dependencies", labelloc="t", fontsize='20')
         edge_set = set()
+        node_set_internal = set()
         for export in exports_with_service_names:
             for importing_service in export.importing_services:
                 if export.export_service != importing_service:  # no reflexive
                     edge_set.add((export.export_service, importing_service))
+                    node_set_internal.add(export.export_service)
+                    node_set_internal.add(importing_service)
+
+        for node in node_set_internal:
+            stacks_graph.node(node, label=f'<<font point-size="17">{node}</font>>')
 
         for export_service, importing_service in edge_set:
             stacks_graph.edge(export_service, importing_service)
@@ -162,8 +172,8 @@ class InfraGraphExporter:
                     node_set_external.add(external_service_name)
                     edge_set_external.add((external_service_name, stack.service_name))
 
-        for node in node_set_external:
-            stacks_graph.node(node, _attributes={"fillcolor": "red"})
+        for node in node_set_external: # TODO add team name
+            stacks_graph.node(node, _attributes={"fillcolor": "tomato" }, label=f'<<font point-size="19">{node}</font>>')
 
         for from_node, to_node in edge_set_external:
             stacks_graph.edge(from_node, to_node)
@@ -176,7 +186,7 @@ class InfraGraphExporter:
         for service_name, dependencies in upstream_dependencies.items():
             for dependency in dependencies:
                 upstream_service = dependency.service
-                stacks_graph.node(upstream_service, _attributes={"fillcolor": "blue"})
+                stacks_graph.node(upstream_service, _attributes={"fillcolor": "skyblue"}, label=f'<<font point-size="19">{upstream_service}</font>>')
                 stacks_graph.edge(service_name, upstream_service)
 
         stacks_graph.render(
@@ -190,6 +200,7 @@ class InfraGraphExporter:
             "StacksGraph",
             node_attr={"shape": "box", "style": "filled", "fillcolor": "grey"},
         )
+        stacks_graph.attr(rankdir="LR", label="Stack Dependencies", labelloc="t", fontsize='20')
         edge_set = set()
         node_set_important = set()
         node_set_all = set()
@@ -234,7 +245,7 @@ class InfraGraphExporter:
                     edge_set_external.add((external_service_name, stack_name))
 
         for node in node_set_external:
-            stacks_graph.node(node, _attributes={"fillcolor": "red"})
+            stacks_graph.node(node, _attributes={"fillcolor": "tomato"})
 
         for from_node, to_node in edge_set_external:
             stacks_graph.edge(from_node, to_node)

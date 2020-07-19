@@ -15,6 +15,8 @@ from colorama import Fore, Style
 from botocore.exceptions import ClientError
 from boto3_type_annotations import cloudformation
 
+import coloredlogs
+
 # First party
 from aws_infra_dependencies.model import (
     StackInfo,
@@ -28,6 +30,8 @@ logger = logging.getLogger()
 logging.basicConfig(
     format="[%(levelname)s] %(message)s", level=os.getenv("LOG_LEVEL", "INFO")
 )
+coloredlogs.install(level=os.getenv("LOG_LEVEL", "INFO"), fmt="[%(levelname)s] %(message)s", logger=logger)
+
 
 
 class DataExtractor:
