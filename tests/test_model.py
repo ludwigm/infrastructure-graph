@@ -3,7 +3,7 @@ import pytest
 from pyexpect import expect
 
 # First party
-from aws_infra_dependencies.model import StackParameter, ExternalDependency
+from aws_infra_graph.model import StackParameter, ExternalDependency
 
 test_external_dep = ExternalDependency(
     team_name="team_name", service_name="service_name"

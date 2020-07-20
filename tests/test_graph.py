@@ -5,13 +5,13 @@ from typing import List
 from pyexpect import expect
 
 # First party
-from aws_infra_dependencies.model import (
+from aws_infra_graph.model import (
     StackInfo,
     StackExport,
     StackParameter,
     ExternalDependency,
 )
-from aws_infra_dependencies.graph_exporter import InfraGraphExporter
+from aws_infra_graph.graph_exporter import InfraGraphExporter
 
 EXPECTED_OUTPUT_FILES = {
     "export-services.gv",

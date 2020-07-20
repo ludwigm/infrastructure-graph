@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "aws-infra-dependencies"
+name = "aws-infra-graph"
 version = "0.1.0"
-description = "Tool for visualizing AWS CloudFormation Import/Exports"
+description = "Tool for visualizing AWS CloudFormation Import/Exports and displaying a dependency graph"
 authors = ["Michael Ludwig"]
 
 [tool.poetry.dependencies]
@@ -31,7 +31,7 @@ pytest-mccabe = "^1.0"
 pytest-mypy = "^0.6.2"
 
 [tool.poetry.scripts]
-export-graph = "aws_infra_dependencies.cli:export_infra_graph"
+infra-graph = "aws_infra_graph.cli:export_infra_graph"
 
 [build-system]
 requires = ["poetry>=0.12"]

@@ -1,4 +1,4 @@
-name: Bump version and tag release
+name: Bump version & tag release
 
 on:
   workflow_dispatch:
@@ -53,8 +53,6 @@ jobs:
         git config --global user.name "CI/CD user"
         git commit -m "Bumping version ${{env.version_old}} -> ${{env.version_new}}"
         git tag "v${{env.version_new}}"
-        # git push -u origin master
-        # git push -u origin "v${{env.version_new}}"
     - name: push results
       uses: ad-m/github-push-action@master
       with:

@@ -13,9 +13,9 @@ from colorama import Fore, Style, init
 from graphviz import Digraph
 
 # First party
-from aws_infra_dependencies.model import StackInfo, StackExport
-from aws_infra_dependencies.config import InfraGraphConfig, load_config
-from aws_infra_dependencies.data_extractor import DataExtractor, IDataExtractor
+from aws_infra_graph.model import StackInfo, StackExport
+from aws_infra_graph.config import InfraGraphConfig, load_config
+from aws_infra_graph.data_extractor import DataExtractor, IDataExtractor
 
 init(autoreset=True)
 

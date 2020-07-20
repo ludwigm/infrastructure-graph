@@ -9,7 +9,7 @@ import click
 from colorama import Fore
 
 # First party
-from aws_infra_dependencies.graph_exporter import InfraGraphExporter
+from aws_infra_graph.graph_exporter import InfraGraphExporter
 
 logger = logging.getLogger()
 logging.basicConfig(

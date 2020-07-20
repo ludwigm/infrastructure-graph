@@ -2,7 +2,7 @@
 from pyexpect import expect
 
 # First party
-from aws_infra_dependencies import __version__
+from aws_infra_graph import __version__
 
 
 def test_version():

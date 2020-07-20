@@ -8,7 +8,7 @@ def unit_tests(session: Session) -> None:
     session.run(
         "pytest",
         "--mocha",
-        "--cov=./aws_infra_dependencies",
+        "--cov=./aws_infra_graph",
         "--cov-report",
         "html:tests/reports/coverage-html",
         "--cov-report",

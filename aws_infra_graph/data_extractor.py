@@ -16,13 +16,13 @@ from botocore.exceptions import ClientError
 from boto3_type_annotations import cloudformation
 
 # First party
-from aws_infra_dependencies.model import (
+from aws_infra_graph.model import (
     StackInfo,
     StackExport,
     StackParameter,
     ExternalDependency,
 )
-from aws_infra_dependencies.utils import file_cached, build_tag_search_patterns
+from aws_infra_graph.utils import file_cached, build_tag_search_patterns
 
 logger = logging.getLogger()
 logging.basicConfig(

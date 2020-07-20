@@ -37,8 +37,8 @@ In the configuration it is also possible to configure for which CloudFormation t
 ```
 poetry install
 poetry shell
-export-graph --help
-export-graph
+infra-graph --help
+infra-graph
 open output/
 ```
 
@@ -47,7 +47,7 @@ Heavy operations like gathering data from AWS are cached to disk. In case you wa
 # Usage
 
 ```
-Usage: export-graph [OPTIONS]
+Usage: infra-graph [OPTIONS]
 
 Options:
   -e, --env TEXT           On which environment to run this task. e.g. dev,
