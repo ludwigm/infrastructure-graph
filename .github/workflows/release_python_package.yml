@@ -41,3 +41,5 @@ jobs:
         poetry install
         poetry build -f wheel
         poetry publish
+      env:
+        POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
