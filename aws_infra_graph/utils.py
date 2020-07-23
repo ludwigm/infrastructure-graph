@@ -6,10 +6,17 @@ from typing import List
 
 # Third party
 import jmespath
+import coloredlogs
 
-logger = logging.getLogger()
+# TODO simplify logging
+logger = logging.getLogger(__name__)
 logging.basicConfig(
     format="[%(levelname)s] %(message)s", level=os.getenv("LOG_LEVEL", "INFO")
+)
+coloredlogs.install(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    fmt="[%(levelname)s] %(message)s",
+    logger=logger,
 )
 
 

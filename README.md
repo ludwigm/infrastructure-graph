@@ -35,6 +35,7 @@ In the configuration it is also possible to configure for which CloudFormation t
 # How to execute
 
 ```
+brew install graphviz # depends on the availability of the dot tool
 poetry install
 poetry shell
 infra-graph --help

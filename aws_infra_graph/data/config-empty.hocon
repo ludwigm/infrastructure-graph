@@ -1,0 +1,15 @@
+infraGraph {
+    defaultProject = projectA
+    serviceTags = ["Service"]
+    componentTags = ["Component"]
+    projects {
+        projectA {
+           downstreamDependencies {
+
+           }
+           internalManualDependencies {
+
+           }
+        }
+    }
+}

@@ -19,7 +19,7 @@ from aws_infra_graph.data_extractor import DataExtractor, IDataExtractor
 
 init(autoreset=True)
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 logging.basicConfig(
     format="[%(levelname)s] %(message)s", level=os.getenv("LOG_LEVEL", "INFO")
 )
@@ -141,6 +141,8 @@ class InfraGraphExporter:
             for param in stack_info.parameters:
                 description = f"[{param.description}]" if param.description else ""
                 logger.info(f"\t\t{param.name}: {param.value} {description}")
+                if param.external_dependency:
+                    logger.info(f"\t\t{Fore.YELLOW}{param.external_dependency}")
 
         logger.info("\n")
 

@@ -6,20 +6,32 @@ import logging
 
 # Third party
 import click
+import coloredlogs
 from colorama import Fore
 
 # First party
+from aws_infra_graph.config import init_config
 from aws_infra_graph.graph_exporter import InfraGraphExporter
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 logging.basicConfig(
     format="[%(levelname)s] %(message)s", level=os.getenv("LOG_LEVEL", "INFO")
+)
+coloredlogs.install(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    fmt="[%(levelname)s] %(message)s",
+    logger=logger,
 )
 
 IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
 
 
-@click.command()
+@click.group("infra-graph")
+def main():
+    pass
+
+
+@main.command("export", help="Gather data about the infra and visualize them")
 @click.option(
     "-e",
     "--env",
@@ -45,11 +57,13 @@ IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
     type=bool,
     help="In case of disc cached result clear them beforehand",
 )
-def export_infra_graph(env: str, project_name: str, refresh: bool):
+def export(env: str, project_name: str, refresh: bool):
     logger.info(f"{Fore.BLUE}Starting infra export for {env}. Can take some minutes.")
     exporter = InfraGraphExporter(env, project_name)
     exporter.export(refresh)
 
 
-if __name__ == "__main__":
-    export_infra_graph()
+@main.command("init", help="Initialize config after installation")
+def init():
+    logger.info("Init config")
+    init_config()

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Iterable, Optional, Protocol
 # Third party
 import boto3
 import coloredlogs
-from colorama import Fore, Style
+from colorama import Style
 from botocore.exceptions import ClientError
 from boto3_type_annotations import cloudformation
 
@@ -24,7 +24,7 @@ from aws_infra_graph.model import (
 )
 from aws_infra_graph.utils import file_cached, build_tag_search_patterns
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 logging.basicConfig(
     format="[%(levelname)s] %(message)s", level=os.getenv("LOG_LEVEL", "INFO")
 )
@@ -178,7 +178,6 @@ class DataExtractor:
             params[name] = StackParameter(name=name, value=value)
 
         for parameter in stack_template_details["Parameters"]:
-            # print(parameter)
             name = parameter["ParameterKey"]
             description = parameter.get("Description")
             # TODO exceptions
@@ -196,7 +195,6 @@ class DataExtractor:
                     team_name=metadata_transformed["team"],
                     service_name=metadata_transformed["service"],
                 )
-                logger.info(f"{Fore.YELLOW}{external_dep}")
 
             params[name] = StackParameter(
                 name=params[name].name,
