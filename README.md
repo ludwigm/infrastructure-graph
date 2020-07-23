@@ -31,6 +31,7 @@ Rename the `config.hocon.template` to `config.hocon` and adapt if you have exter
 Names need to match up with discovered service names.
 Additionally it is also possible to specify internal manual dependencies like manully create infrastructure components.
 In the configuration it is also possible to configure for which CloudFormation tags the higher level grouping is done.
+Instead of having a config in your current folder you can also use `infra-graph init` which creates a config in `~/.config/aws-infra-graph/config.hocon`
 
 # How to execute
 
@@ -39,7 +40,8 @@ brew install graphviz # depends on the availability of the dot tool
 poetry install
 poetry shell
 infra-graph --help
-infra-graph
+infra-graph init
+infra-graph export
 open output/
 ```
 
@@ -48,7 +50,20 @@ Heavy operations like gathering data from AWS are cached to disk. In case you wa
 # Usage
 
 ```
-Usage: infra-graph [OPTIONS]
+Usage: infra-graph [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  export  Gather data about the infra and visualize them
+  init    Initialize config after installation
+```
+
+```
+Usage: infra-graph export [OPTIONS]
+
+  Gather data about the infra and visualize them
 
 Options:
   -e, --env TEXT           On which environment to run this task. e.g. dev,
