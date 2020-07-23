@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aws-infra-graph"
-version = "0.1.1"
+version = "0.1.2"
 description = "Tool for visualizing AWS CloudFormation Import/Exports and displaying a dependency graph"
 authors = ["Michael Ludwig"]
 readme = "./README.md"
