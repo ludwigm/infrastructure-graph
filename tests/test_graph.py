@@ -51,7 +51,7 @@ class TestGraph:
         )
 
         # WHEN i try to export it
-        graph_exporter.export(refresh=True)
+        graph_exporter.export(refresh=True, cluster_stack_graph=False)
 
         # THEN it should create output files
         resulting_files = {file.name for file in tmp_path.iterdir()}
@@ -99,7 +99,7 @@ class TestGraph:
         )
 
         # WHEN i try to export it
-        graph_exporter.export(refresh=True)
+        graph_exporter.export(refresh=True, cluster_stack_graph=False)
 
         # THEN it should create output files
         resulting_files = {file.name for file in tmp_path.iterdir()}
@@ -110,3 +110,29 @@ class TestGraph:
             expect(contents).to_contain("Snowflake -> etl")
             expect(contents).to_contain("etl -> api")
             expect(contents).to_contain("api -> ExternalService")
+
+    def test_partition_node_set(self):
+        """Graph :: can partition a node set by service name"""
+
+        # GIVEN
+        nodes = {"a", "b", "c", "d", "e"}
+        stacks_service_names = {
+            "a": "service1",
+            "b": "service1",
+            "c": None,
+            "d": "service2",
+            "e": "service2",
+        }
+
+        # WHEN
+        result = InfraGraphExporter._partition_node_set(nodes, stacks_service_names)
+
+        # THEN
+        expected = set(
+            [
+                ("service1", frozenset({"a", "b"})),
+                (None, frozenset({"c"})),
+                ("service2", frozenset({"d", "e"})),
+            ]
+        )
+        expect(result).to_equal(expected)

@@ -24,6 +24,15 @@ Parameters:
 
 It generates GraphViz output in the `output` folder. Other additionally interesting information about the stacks is displayed in the stdout.
 
+# Installation
+
+If you don't want to clone the repo it is also possible to install this tool via Pypi. I recommend pipx instead of pip to not clutter your local python environment:
+
+```
+pip install aws-infra-graph
+pipx install aws-infra-graph
+```
+
 
 # Configuration
 
@@ -35,10 +44,16 @@ Instead of having a config in your current folder you can also use `infra-graph 
 
 # How to execute
 
+In case you cloned the source the following is needed:
+
 ```
 brew install graphviz # depends on the availability of the dot tool
 poetry install
 poetry shell
+```
+
+The following commands work now either in your poetry venv or if you installed the software before via pip/pipx.
+```
 infra-graph --help
 infra-graph init
 infra-graph export
@@ -66,13 +81,18 @@ Usage: infra-graph export [OPTIONS]
   Gather data about the infra and visualize them
 
 Options:
-  -e, --env TEXT           On which environment to run this task. e.g. dev,
-                           stg, prd  [default: dev]
+  -e, --env TEXT             On which environment to run this task. e.g. dev,
+                             stg, prd  [default: dev]
 
-  -t, --project-name TEXT  Project/Team name is expected of part of the
-                           resource name and need to be specified here or
-                           taken from config
+  -t, --project-name TEXT    Project/Team name is expected of part of the
+                             resource name and need to be specified here or
+                             taken from config
 
-  -r, --refresh            In case of disc cached result clear them beforehand
-  --help                   Show this message and exit.
+  -r, --refresh              In case of disc cached result clear them
+                             beforehand
+
+  -c, --cluster-stack-graph  Should the results of the stack graph be
+                             clustered by service?
+
+  --help                     Show this message and exit.
 ```

@@ -3,9 +3,10 @@
 # Core Library
 import os
 import logging
-from typing import List, Optional, DefaultDict
+from typing import Set, Dict, List, Tuple, Optional, FrozenSet, DefaultDict
 from pathlib import Path
 from collections import defaultdict
+from dataclasses import dataclass
 
 # Third party
 import coloredlogs
@@ -30,6 +31,21 @@ coloredlogs.install(
 )
 
 IMPORTANT_STACK_DEPENDENCY_TRESHOLD = 4
+
+Node = str
+NodeSet = Set[Node]
+EdgeSet = Set[Tuple[Node, Node]]
+
+
+@dataclass
+class NodeAndEdgesStackGraph:
+    edges: EdgeSet
+    edges_external: EdgeSet
+    all_nodes: NodeSet
+    important_nodes: NodeSet
+    nodes_with_downstream_deps: NodeSet
+    leaf_nodes: NodeSet
+    external_nodes: NodeSet
 
 
 class InfraGraphExporter:
@@ -64,7 +80,7 @@ class InfraGraphExporter:
         else:
             self.data_extractor = data_extractor
 
-    def export(self, refresh: bool):
+    def export(self, refresh: bool, cluster_stack_graph: bool):
         if refresh:
             self.delete_caches()
         stack_infos = self.data_extractor.gather_stacks()
@@ -74,7 +90,7 @@ class InfraGraphExporter:
             export for export in exports if len(export.importing_stacks) > 0
         ]
         self._print_export_infos(imported_exports)
-        self._visualize_stacks(imported_exports, stack_infos)
+        self._visualize_stacks(imported_exports, stack_infos, cluster_stack_graph)
         self._visualize_services(imported_exports, stack_infos)
         logger.info(f"\nGraph exports finished in {self.output_folder} folder")
 
@@ -168,7 +184,6 @@ class InfraGraphExporter:
                     node_set_internal.add(importing_service)
 
         for node in node_set_internal:
-            # TODO does this really work?
             stacks_graph.node(node, label=f'<<font point-size="17">{node}</font>>')
 
         for export_service, importing_service in edge_set:
@@ -181,8 +196,6 @@ class InfraGraphExporter:
             for parameter in stack.parameters:
                 if parameter.external_dependency is not None:
                     external_service_name = parameter.external_dependency.service_name
-                    # stacks_graph.node(external_service_name, _attributes={"fillcolor": "red"})
-                    # stacks_graph.edge(external_service_name, stack.service_name)
                     node_set_external.add(external_service_name)
                     edge_set_external.add((external_service_name, stack.service_name))
 
@@ -229,9 +242,11 @@ class InfraGraphExporter:
             format="png", filename=f"{self.output_folder}/export-services.gv"
         )
 
-    # TODO try grouping by services where possible with subgraphs
     def _visualize_stacks(
-        self, exports_enriched: List[StackExport], stack_infos: List[StackInfo]
+        self,
+        exports_enriched: List[StackExport],
+        stack_infos: List[StackInfo],
+        should_cluster: bool,
     ) -> None:  # TODO already filter before
         stacks_graph = Digraph(
             "StacksGraph",
@@ -240,55 +255,141 @@ class InfraGraphExporter:
         stacks_graph.attr(
             rankdir="LR", label="Stack Dependencies", labelloc="t", fontsize="20"
         )
-        edge_set = set()
-        node_set_important = set()
-        node_set_all = set()
-        node_set_has_downstream = set()
 
-        for export in exports_enriched:
-            node_set_all.add(export.exporting_stack_name)
-            node_set_has_downstream.add(export.exporting_stack_name)
-            for importing_stack in export.importing_stacks:
-                edge_set.add((export.exporting_stack_name, importing_stack))
-                node_set_all.add(importing_stack)
+        stacks_service_names: Dict[str, Optional[str]] = {
+            self._remove_stack_prefix(stack.stack_name): stack.service_name
+            for stack in stack_infos
+        }
 
-            if len(export.importing_stacks) > IMPORTANT_STACK_DEPENDENCY_TRESHOLD:
-                node_set_important.add(export.exporting_stack_name)
+        nodes_and_edges = self._retrieve_nodes_and_edges_for_stacks_graph(
+            exports_enriched, stack_infos
+        )
 
-        node_set_leafs = node_set_all - node_set_has_downstream
-        logger.debug(f"node_set_important: {node_set_important}")
-        logger.debug(f"node_set_leafs: {node_set_leafs}")
+        logger.debug(f"node_set_important: {nodes_and_edges.important_nodes}")
+        logger.debug(f"node_set_leafs: {nodes_and_edges.leaf_nodes}")
 
-        for exporting_stack_name in node_set_important:
-            node = exporting_stack_name.replace(f"{self.stack_prefix}-", "")
-            stacks_graph.node(node, _attributes={"fillcolor": "orange"})
+        if should_cluster:
+            partitioned_node_set_all = self._partition_node_set(
+                nodes_and_edges.all_nodes, stacks_service_names
+            )
+            for service, nodes in partitioned_node_set_all:
+                if service:
+                    with stacks_graph.subgraph(name=f"cluster_{service}") as subgraph:
+                        subgraph.attr(label=service)
+                        for node in nodes:
+                            subgraph.node(
+                                node,
+                                _attributes={
+                                    "fillcolor": self._determine_node_color(
+                                        node,
+                                        nodes_and_edges.important_nodes,
+                                        nodes_and_edges.leaf_nodes,
+                                    )
+                                },
+                            )
+                else:
+                    for node in nodes:
+                        stacks_graph.node(
+                            node,
+                            _attributes={
+                                "fillcolor": self._determine_node_color(
+                                    node,
+                                    nodes_and_edges.important_nodes,
+                                    nodes_and_edges.leaf_nodes,
+                                )
+                            },
+                        )
+        else:
+            for node in nodes_and_edges.all_nodes:
+                stacks_graph.node(
+                    node,
+                    _attributes={
+                        "fillcolor": self._determine_node_color(
+                            node,
+                            nodes_and_edges.important_nodes,
+                            nodes_and_edges.leaf_nodes,
+                        )
+                    },
+                )
 
-        for exporting_stack_name in node_set_leafs:
-            node = exporting_stack_name.replace(f"{self.stack_prefix}-", "")
-            stacks_graph.node(node, _attributes={"fillcolor": "green"})
-
-        for exporting_stack_name, importing_stack in edge_set:
-            from_node = exporting_stack_name.replace(f"{self.stack_prefix}-", "")
-            to_node = importing_stack.replace(f"{self.project_name}-{self.env}-", "")
+        for from_node, to_node in nodes_and_edges.edges:
             stacks_graph.edge(from_node, to_node)
 
-        edge_set_external = set()
-        node_set_external = set()
-
-        for stack in stack_infos:
-            for parameter in stack.parameters:
-                if parameter.external_dependency is not None:
-                    external_service_name = parameter.external_dependency.service_name
-                    stack_name = stack.stack_name.replace(f"{self.stack_prefix}-", "")
-                    node_set_external.add(external_service_name)
-                    edge_set_external.add((external_service_name, stack_name))
-
-        for node in node_set_external:
+        for node in nodes_and_edges.external_nodes:
             stacks_graph.node(node, _attributes={"fillcolor": "tomato"})
 
-        for from_node, to_node in edge_set_external:
+        for from_node, to_node in nodes_and_edges.edges_external:
             stacks_graph.edge(from_node, to_node)
 
         stacks_graph.render(
             format="png", filename=f"{self.output_folder}/export-stacks.gv"
         )
+
+    def _retrieve_nodes_and_edges_for_stacks_graph(
+        self, exports_enriched: List[StackExport], stack_infos: List[StackInfo]
+    ) -> NodeAndEdgesStackGraph:
+        edge_set = set()
+        node_set_important = set()
+        node_set_all = set()
+        node_set_has_downstream = set()
+        edge_set_external = set()
+        node_set_external = set()
+
+        for export in exports_enriched:
+            exporting_stack_name_short = self._remove_stack_prefix(
+                export.exporting_stack_name
+            )
+            node_set_all.add(exporting_stack_name_short)
+            node_set_has_downstream.add(exporting_stack_name_short)
+            for importing_stack in export.importing_stacks:
+                importing_stack_short = self._remove_stack_prefix(importing_stack)
+                edge_set.add((exporting_stack_name_short, importing_stack_short))
+                node_set_all.add(importing_stack_short)
+                logger.info(importing_stack)
+
+            if len(export.importing_stacks) > IMPORTANT_STACK_DEPENDENCY_TRESHOLD:
+                node_set_important.add(exporting_stack_name_short)
+
+        for stack in stack_infos:
+            for parameter in stack.parameters:
+                if parameter.external_dependency is not None:
+                    external_service_name = parameter.external_dependency.service_name
+                    stack_name = self._remove_stack_prefix(stack.stack_name)
+                    node_set_all.add(stack_name)
+                    node_set_external.add(external_service_name)
+                    edge_set_external.add((external_service_name, stack_name))
+
+        node_set_leafs = node_set_all - node_set_has_downstream
+
+        return NodeAndEdgesStackGraph(
+            edges=edge_set,
+            edges_external=edge_set_external,
+            all_nodes=node_set_all,
+            important_nodes=node_set_important,
+            nodes_with_downstream_deps=node_set_has_downstream,
+            leaf_nodes=node_set_leafs,
+            external_nodes=node_set_external,
+        )
+
+    def _determine_node_color(
+        self, current_node: str, node_set_important: Set[str], node_set_leafs: Set[str]
+    ):
+        if current_node in node_set_important:
+            return "orange"
+        elif current_node in node_set_leafs:
+            return "green"
+        else:
+            return "gray"
+
+    def _remove_stack_prefix(self, stack_name: str):
+        return stack_name.replace(f"{self.stack_prefix}-", "")
+
+    @staticmethod
+    def _partition_node_set(
+        nodes: Set[str], stacks_service_names: Dict[str, Optional[str]]
+    ) -> Set[Tuple[Optional[str], FrozenSet[str]]]:
+        partitioned_map: Dict[Optional[str], Set[str]] = defaultdict(set)
+        for node in nodes:
+            partitioned_map[stacks_service_names.get(node)].add(node)
+
+        return {(key, frozenset(value)) for key, value in partitioned_map.items()}

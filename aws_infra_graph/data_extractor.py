@@ -78,7 +78,6 @@ class DataExtractor:
 
     def _gather_stacks_gen(self) -> Iterable[StackInfo]:
         paginator = self.cfn_client.get_paginator("list_stacks")
-        # self.cfn_client.list_stacks() # TODO remove
         pages = paginator.paginate(
             StackStatusFilter=[
                 "CREATE_IN_PROGRESS",
