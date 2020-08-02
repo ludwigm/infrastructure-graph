@@ -15,7 +15,12 @@ from graphviz import Digraph
 
 # First party
 from aws_infra_graph.model import StackInfo, StackExport
-from aws_infra_graph.config import InfraGraphConfig, load_config
+from aws_infra_graph.config import (
+    InfraGraphConfig,
+    ManualDependency,
+    ManualInternalDependency,
+    load_config,
+)
 from aws_infra_graph.data_extractor import DataExtractor, IDataExtractor
 
 init(autoreset=True)
@@ -46,6 +51,18 @@ class NodeAndEdgesStackGraph:
     nodes_with_downstream_deps: NodeSet
     leaf_nodes: NodeSet
     external_nodes: NodeSet
+
+
+@dataclass
+class NodeAndEdgesServiceGraph:
+    edges: EdgeSet
+    external_edges: EdgeSet
+    manual_downstream_edges: EdgeSet
+    manual_internal_edges: EdgeSet
+    internal_nodes: NodeSet
+    external_nodes: NodeSet
+    manual_downstream_nodes: NodeSet
+    manual_internal_nodes: NodeSet
 
 
 class InfraGraphExporter:
@@ -174,40 +191,6 @@ class InfraGraphExporter:
         stacks_graph.attr(
             rankdir="LR", label="Service Dependencies", labelloc="t", fontsize="20"
         )
-        edge_set = set()
-        node_set_internal = set()
-        for export in exports_with_service_names:
-            for importing_service in export.importing_services:
-                if export.export_service != importing_service:  # no reflexive
-                    edge_set.add((export.export_service, importing_service))
-                    node_set_internal.add(export.export_service)
-                    node_set_internal.add(importing_service)
-
-        for node in node_set_internal:
-            stacks_graph.node(node, label=f'<<font point-size="17">{node}</font>>')
-
-        for export_service, importing_service in edge_set:
-            stacks_graph.edge(export_service, importing_service)
-
-        edge_set_external = set()
-        node_set_external = set()
-
-        for stack in stack_infos:
-            for parameter in stack.parameters:
-                if parameter.external_dependency is not None:
-                    external_service_name = parameter.external_dependency.service_name
-                    node_set_external.add(external_service_name)
-                    edge_set_external.add((external_service_name, stack.service_name))
-
-        for node in node_set_external:  # TODO add team name
-            stacks_graph.node(
-                node,
-                _attributes={"fillcolor": "tomato"},
-                label=f'<<font point-size="19">{node}</font>>',
-            )
-
-        for from_node, to_node in edge_set_external:
-            stacks_graph.edge(from_node, to_node)
 
         # TODO deduplicate
         downstream_dependencies = self.config.projects[
@@ -218,25 +201,48 @@ class InfraGraphExporter:
             self.project_name
         ].internal_manual_dependencies
 
-        for service_name, dependencies in downstream_dependencies.items():
-            for dependency in dependencies:
-                downstream_service = dependency.service
-                stacks_graph.node(
-                    downstream_service,
-                    _attributes={"fillcolor": "skyblue"},
-                    label=f'<<font point-size="19">{downstream_service}</font>>',
-                )
-                stacks_graph.edge(service_name, downstream_service)
+        nodes_and_edges = self._retrieve_nodes_and_edges_for_service_graph(
+            exports_with_service_names,
+            stack_infos,
+            downstream_dependencies,
+            internal_manual_dependencies,
+        )
 
-        for service_name, internal_dependencies in internal_manual_dependencies.items():
-            for internal_dependency in internal_dependencies:
-                upstream_service = internal_dependency.service
-                stacks_graph.node(
-                    upstream_service,
-                    _attributes={"fillcolor": "grey68", "style": "dotted, filled"},
-                    label=f'<<font point-size="17">{upstream_service}</font>>',
-                )
-                stacks_graph.edge(upstream_service, service_name)
+        for node in nodes_and_edges.internal_nodes:
+            stacks_graph.node(node, label=f'<<font point-size="17">{node}</font>>')
+
+        for export_service, importing_service in nodes_and_edges.edges:
+            stacks_graph.edge(export_service, importing_service)
+
+        for node in nodes_and_edges.external_nodes:  # TODO add team name
+            stacks_graph.node(
+                node,
+                _attributes={"fillcolor": "tomato"},
+                label=f'<<font point-size="19">{node}</font>>',
+            )
+
+        for from_node, to_node in nodes_and_edges.external_edges:
+            stacks_graph.edge(from_node, to_node)
+
+        for node in nodes_and_edges.manual_downstream_nodes:
+            stacks_graph.node(
+                node,
+                _attributes={"fillcolor": "skyblue"},
+                label=f'<<font point-size="19">{node}</font>>',
+            )
+
+        for from_node, to_node in nodes_and_edges.manual_downstream_edges:
+            stacks_graph.edge(from_node, to_node)
+
+        for node in nodes_and_edges.manual_internal_nodes:
+            stacks_graph.node(
+                node,
+                _attributes={"fillcolor": "grey68", "style": "dotted, filled"},
+                label=f'<<font point-size="17">{node}</font>>',
+            )
+
+        for from_node, to_node in nodes_and_edges.manual_internal_edges:
+            stacks_graph.edge(from_node, to_node)
 
         stacks_graph.render(
             format="png", filename=f"{self.output_folder}/export-services.gv"
@@ -323,6 +329,62 @@ class InfraGraphExporter:
 
         stacks_graph.render(
             format="png", filename=f"{self.output_folder}/export-stacks.gv"
+        )
+
+    @staticmethod
+    def _retrieve_nodes_and_edges_for_service_graph(
+        exports: List[StackExport],
+        stack_infos: List[StackInfo],
+        downstream_dependencies: Dict[str, List[ManualDependency]],
+        internal_manual_dependencies: Dict[str, List[ManualInternalDependency]],
+    ) -> NodeAndEdgesServiceGraph:
+        edge_set = set()
+        node_set_internal = set()
+        edge_set_external = set()
+        node_set_external = set()
+        manual_downstream_nodes = set()
+        manual_downstream_edges = set()
+        manual_internal_nodes = set()
+        manual_internal_edges = set()
+        for export in exports:
+            for importing_service in export.importing_services:
+                if export.export_service != importing_service:  # no reflexive
+                    exporting_service = export.export_service or "Unknown"
+                    edge_set.add((exporting_service, importing_service))
+                    node_set_internal.add(exporting_service)
+                    node_set_internal.add(importing_service)
+
+        for stack in stack_infos:
+            for parameter in stack.parameters:
+                if parameter.external_dependency is not None:
+                    external_service_name = parameter.external_dependency.service_name
+                    internal_service_name = stack.service_name or "Unknown"
+                    node_set_external.add(external_service_name)
+                    edge_set_external.add(
+                        (external_service_name, internal_service_name)
+                    )
+
+        for service_name, dependencies in downstream_dependencies.items():
+            for dependency in dependencies:
+                downstream_service = dependency.service
+                manual_downstream_nodes.add(downstream_service)
+                manual_downstream_edges.add((service_name, downstream_service))
+
+        for service_name, internal_dependencies in internal_manual_dependencies.items():
+            for internal_dependency in internal_dependencies:
+                upstream_service = internal_dependency.service
+                manual_internal_nodes.add(upstream_service)
+                manual_internal_edges.add((upstream_service, service_name))
+
+        return NodeAndEdgesServiceGraph(
+            edges=edge_set,
+            external_edges=edge_set_external,
+            manual_downstream_edges=manual_downstream_edges,
+            manual_internal_edges=manual_internal_edges,
+            internal_nodes=node_set_internal,
+            external_nodes=node_set_external,
+            manual_internal_nodes=manual_internal_nodes,
+            manual_downstream_nodes=manual_downstream_nodes,
         )
 
     def _retrieve_nodes_and_edges_for_stacks_graph(
