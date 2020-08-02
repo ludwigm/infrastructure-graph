@@ -46,13 +46,19 @@ jobs:
       run: |
         git diff
         echo "${{env.version_old}} -> ${{env.version_new}}"
+    # TODO protect for cases where no releases/tags exist yet
+    - name: Display changelog
+      run: |
+        changelog=$(git --no-pager log --oneline --pretty=format:"* %s (%h)" v${{env.version_old}}..HEAD)
+        echo "${changelog}"
+        echo "::set-env name=changelog::${changelog}"
     - name: commit results
       run: |
         git add -u
         git config --global user.email "ci@github.com"
         git config --global user.name "CI/CD user"
         git commit -m "Bumping version ${{env.version_old}} -> ${{env.version_new}}"
-        git tag "v${{env.version_new}}"
+        git tag "v${{env.version_new}}" -m "${{env.changelog}}"
     - name: push results
       uses: ad-m/github-push-action@master
       with:
