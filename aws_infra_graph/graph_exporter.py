@@ -4,7 +4,6 @@
 import os
 import logging
 from typing import Set, Dict, List, Tuple, Optional, FrozenSet, DefaultDict
-from pathlib import Path
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -15,6 +14,7 @@ from graphviz import Digraph
 
 # First party
 from aws_infra_graph.model import StackInfo, StackExport
+from aws_infra_graph.utils import SYSTEM_CACHE_ROOT
 from aws_infra_graph.config import (
     InfraGraphConfig,
     ManualDependency,
@@ -113,8 +113,13 @@ class InfraGraphExporter:
 
     @staticmethod
     def delete_caches():
+        if not SYSTEM_CACHE_ROOT.exists():
+            return
+
         files = (
-            x for x in Path(".").iterdir() if x.is_file() and str(x).endswith(".cache")
+            x
+            for x in SYSTEM_CACHE_ROOT.iterdir()
+            if x.is_file() and str(x).endswith(".cache")
         )
         for file in files:
             logger.info(f"Removing {str(file)}")

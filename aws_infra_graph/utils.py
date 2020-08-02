@@ -3,6 +3,7 @@ import os
 import pickle
 import logging
 from typing import List
+from pathlib import Path
 
 # Third party
 import jmespath
@@ -19,6 +20,8 @@ coloredlogs.install(
     logger=logger,
 )
 
+SYSTEM_CACHE_ROOT = Path.home() / Path(".cache/aws-infra-graph")
+
 
 def file_cached(cachefile):
     """
@@ -28,18 +31,21 @@ def file_cached(cachefile):
 
     def decorator(fn):
         def wrapped(*args, **kwargs):
+            cachefile_path = SYSTEM_CACHE_ROOT / Path(cachefile)
+            if not SYSTEM_CACHE_ROOT.exists():
+                SYSTEM_CACHE_ROOT.mkdir(parents=True)
             # if cache exists -> load it and return its content
-            if os.path.exists(cachefile):
-                with open(cachefile, "rb") as cachehandle:
-                    logger.info(f"using cached result from '{cachefile}'")
+            if cachefile_path.exists():
+                with open(cachefile_path, "rb") as cachehandle:
+                    logger.info(f"using cached result from '{cachefile_path}'")
                     return pickle.load(cachehandle)
 
             # execute the function with all arguments passed
             res = fn(*args, **kwargs)
 
             # write to cache file
-            with open(cachefile, "wb") as cachehandle:
-                logger.info(f"saving result to cache '{cachefile}'")
+            with open(cachefile_path, "wb") as cachehandle:
+                logger.info(f"saving result to cache '{cachefile_path}'")
                 pickle.dump(res, cachehandle)
 
             return res

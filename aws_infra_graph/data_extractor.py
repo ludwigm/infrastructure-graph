@@ -55,7 +55,7 @@ class DataExtractor:
         self.service_tag_search_patterns = build_tag_search_patterns(service_tags)
         self.component_tag_search_patterns = build_tag_search_patterns(component_tags)
 
-    @file_cached(".gather_and_filter_exports.cache")
+    @file_cached("gather_and_filter_exports.cache")
     def gather_and_filter_exports(self, stacks: List[StackInfo]) -> List[StackExport]:
         exports_raw = self._gather_raw_exports()
         exports = list(self._extract_exports(exports_raw))
@@ -72,7 +72,7 @@ class DataExtractor:
         )
         return exports_with_service_names
 
-    @file_cached(".gather_stacks.cache")
+    @file_cached("gather_stacks.cache")
     def gather_stacks(self) -> List[StackInfo]:
         return list(self._gather_stacks_gen())
 
