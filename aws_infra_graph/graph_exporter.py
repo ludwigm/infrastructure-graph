@@ -3,7 +3,8 @@
 # Core Library
 import os
 import logging
-from typing import Set, Dict, List, Tuple, Optional, FrozenSet, DefaultDict
+import collections
+from typing import Set, Dict, List, Tuple, Counter, Optional, FrozenSet, DefaultDict
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -102,6 +103,8 @@ class InfraGraphExporter:
             self.delete_caches()
         stack_infos = self.data_extractor.gather_stacks()
         self._print_stack_infos(stack_infos)
+        statistics = self._get_statictics(stack_infos)
+        self._print_statistics(statistics)
         exports = self.data_extractor.gather_and_filter_exports(stack_infos)
         imported_exports = [
             export for export in exports if len(export.importing_stacks) > 0
@@ -124,6 +127,22 @@ class InfraGraphExporter:
         for file in files:
             logger.info(f"Removing {str(file)}")
             file.unlink()
+
+    @staticmethod
+    def _get_statictics(stack_infos: List[StackInfo]) -> Counter:
+        counts: Counter[str] = collections.Counter()
+        for stack_info in stack_infos:
+            for resource in stack_info.resources:
+                counts[resource.resource_type.replace("AWS::", "")] += 1
+        return counts
+
+    @staticmethod
+    def _print_statistics(statistics):
+        logger.info("\n")
+        logger.info(f"{Fore.BLUE}Resource Statistics:")
+        for resource_type, count in statistics.most_common():
+            logger.info(f"\t{resource_type}: {count} resources")
+        logger.info("\n")
 
     @staticmethod
     def _print_export_infos(exports: List[StackExport]) -> None:
@@ -181,6 +200,14 @@ class InfraGraphExporter:
                 logger.info(f"\t\t{param.name}: {param.value} {description}")
                 if param.external_dependency:
                     logger.info(f"\t\t{Fore.YELLOW}{param.external_dependency}")
+
+        logger.info(f"{Fore.BLUE}Stacks resources:")
+        for stack_info in stack_infos:
+            logger.info(f"{Style.BRIGHT}\t{stack_info.stack_name}:")
+            for resource in stack_info.resources:
+                logger.info(
+                    f"\t\t[{resource.resource_type}] {resource.logical_id}: {resource.physical_id}"
+                )
 
         logger.info("\n")
 

@@ -52,13 +52,15 @@ jobs:
         changelog=$(git --no-pager log --oneline --pretty=format:"* %s (%h)" v${{env.version_old}}..HEAD)
         echo "${changelog}"
         echo "::set-env name=changelog::${changelog}"
+    # TODO investigate how to add multi-line tag messages here (e.g. via a temp file)
     - name: commit results
       run: |
         git add -u
         git config --global user.email "ci@github.com"
         git config --global user.name "CI/CD user"
         git commit -m "Bumping version ${{env.version_old}} -> ${{env.version_new}}"
-        git tag "v${{env.version_new}}" -m "${{env.changelog}}"
+        echo "${{env.changelog}}"
+        git tag "v${{env.version_new}}"
     - name: push results
       uses: ad-m/github-push-action@master
       with:

@@ -1,5 +1,6 @@
 # Core Library
 from typing import List
+from collections import Counter
 
 # Third party
 from pyexpect import expect
@@ -8,6 +9,7 @@ from pyexpect import expect
 from aws_infra_graph.model import (
     StackInfo,
     StackExport,
+    StackResource,
     StackParameter,
     ExternalDependency,
 )
@@ -66,6 +68,7 @@ class TestGraph:
                 stack_name="dev-teamName-api",
                 service_name="api",
                 component_name="service",
+                resources=[],
             ),
             StackInfo(
                 stack_name="dev-teamName-etl",
@@ -78,6 +81,7 @@ class TestGraph:
                         external_dependency=ExternalDependency("data", "Snowflake"),
                     )
                 ],
+                resources=[],
             ),
         ]
         stack_exports = [
@@ -136,3 +140,51 @@ class TestGraph:
             ]
         )
         expect(result).to_equal(expected)
+
+    def test_resource_statistics(self):
+        """Graph :: can gather count statistics of resource types"""
+        # GIVEN
+        stack_infos = [
+            StackInfo(
+                stack_name="dev-teamName-api",
+                service_name="api",
+                component_name="service",
+                resources=[
+                    StackResource(
+                        logical_id="ResourceA",
+                        physical_id="api-resource-a",
+                        resource_type="AWS::IAM::Role",
+                    ),
+                    StackResource(
+                        logical_id="ResourceB",
+                        physical_id="api-resource-b",
+                        resource_type="AWS::ECS::Service",
+                    ),
+                ],
+            ),
+            StackInfo(
+                stack_name="dev-teamName-etl",
+                service_name="etl",
+                component_name="task",
+                resources=[
+                    StackResource(
+                        logical_id="ResourceA",
+                        physical_id="etl-resource-a",
+                        resource_type="AWS::Logs::LogGroup",
+                    ),
+                    StackResource(
+                        logical_id="ResourceB",
+                        physical_id="etl-resource-b",
+                        resource_type="AWS::ECS::Service",
+                    ),
+                ],
+            ),
+        ]
+
+        # WHEN
+        statistics = InfraGraphExporter._get_statictics(stack_infos)
+
+        # THEN
+        expect(statistics).to_equal(
+            Counter({"Logs::LogGroup": 1, "ECS::Service": 2, "IAM::Role": 1})
+        )

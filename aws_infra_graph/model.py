@@ -20,8 +20,16 @@ class StackParameter:
 
 
 @dataclass
+class StackResource:
+    logical_id: str
+    resource_type: str
+    physical_id: Optional[str]
+
+
+@dataclass
 class StackInfo:
     stack_name: str
+    resources: List[StackResource]
     service_name: Optional[str]
     component_name: Optional[str]
     parameters: List[StackParameter] = field(default_factory=list)  # TODO

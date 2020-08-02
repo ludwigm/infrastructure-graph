@@ -19,6 +19,7 @@ from boto3_type_annotations import cloudformation
 from aws_infra_graph.model import (
     StackInfo,
     StackExport,
+    StackResource,
     StackParameter,
     ExternalDependency,
 )
@@ -102,15 +103,18 @@ class DataExtractor:
                     yield self._gather_stack_info(stack_name)
                     time.sleep(0.1)  # avoid throttling
 
-    def _gather_stack_info(self, stack_name):
+    def _gather_stack_info(self, stack_name) -> StackInfo:
         stack_detail_results = self.cfn_client.describe_stacks(StackName=stack_name)
         stack_template_details_result = self.cfn_client.get_template_summary(
+            StackName=stack_name
+        )
+        stack_resource_details = self.cfn_client.describe_stack_resources(
             StackName=stack_name
         )
         stack_details = stack_detail_results["Stacks"][0]
         stack_tags = stack_details["Tags"]
         logger.debug(f"stack: {stack_name}")
-
+        resources = self._extract_resources(stack_resource_details["StackResources"])
         parameters = self._extract_parameters(
             stack_details, stack_template_details_result
         )
@@ -121,7 +125,19 @@ class DataExtractor:
             service_name=service_name,
             component_name=component_name,
             parameters=parameters,
+            resources=resources,
         )
+
+    @staticmethod
+    def _extract_resources(resource_details: Dict):
+        return [
+            StackResource(
+                logical_id=resource_detail["LogicalResourceId"],
+                physical_id=resource_detail.get("PhysicalResourceId"),
+                resource_type=resource_detail["ResourceType"],
+            )
+            for resource_detail in resource_details
+        ]
 
     def _get_service_name(self, stack_tags) -> Optional[str]:
         return next(
