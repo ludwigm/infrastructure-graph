@@ -11,17 +11,17 @@ test_external_dep = ExternalDependency(
 
 
 class TestModel:
-    @pytest.mark.parametrize("team_name", ["team", None])
-    @pytest.mark.parametrize("service_name", ["service", None])
+    @pytest.mark.parametrize("team_name", ["team"])
+    @pytest.mark.parametrize("service_name", ["service"])
     def test_model_external_dependency(self, team_name, service_name):
         """Models :: ExternalDependency :: model can be created"""
         model = ExternalDependency(team_name=team_name, service_name=service_name)
         expect(model).to_exist()
 
-    @pytest.mark.parametrize("name", ["name", None])
-    @pytest.mark.parametrize("value", ["value", None])
-    @pytest.mark.parametrize("description", ["description", None])
-    @pytest.mark.parametrize("external_dependency", [test_external_dep, None])
+    @pytest.mark.parametrize("name", ["name"])
+    @pytest.mark.parametrize("value", ["value"])
+    @pytest.mark.parametrize("description", ["description"])
+    @pytest.mark.parametrize("external_dependency", [test_external_dep])
     def test_model_stack_parameter(self, name, value, description, external_dependency):
         """Models :: StackParameter :: the model can be created"""
         model = StackParameter(

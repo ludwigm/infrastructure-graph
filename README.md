@@ -22,7 +22,7 @@ Parameters:
     Description: "The snowflake account name which is used to connect to. | team=Data,service=Snowflake"
 ```
 
-It generates GraphViz output in the `output` folder. Other additionally interesting information about the stacks is displayed in the stdout.
+It generates GraphViz output in the `output` folder. Other additionally interesting information about the stacks is displayed in the stdout and also exported as JSON.
 
 # Installation
 

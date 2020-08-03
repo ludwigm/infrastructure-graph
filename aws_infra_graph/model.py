@@ -1,6 +1,10 @@
 # Core Library
-from typing import List, Optional
-from dataclasses import field, dataclass
+from typing import Dict, List, Optional
+from dataclasses import field
+
+# Third party
+from pydantic.main import BaseModel
+from pydantic.dataclasses import dataclass
 
 
 @dataclass
@@ -43,3 +47,9 @@ class StackExport:
     importing_stacks: List[str] = field(default_factory=list)
     export_service: Optional[str] = None
     importing_services: List[str] = field(default_factory=list)
+
+
+class DataExport(BaseModel):
+    stacks: List[StackInfo]
+    stack_exports: List[StackExport]
+    resource_statistics: Dict[str, int]

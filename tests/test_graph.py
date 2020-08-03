@@ -16,6 +16,7 @@ from aws_infra_graph.model import (
 from aws_infra_graph.graph_exporter import InfraGraphExporter
 
 EXPECTED_OUTPUT_FILES = {
+    "export.json",
     "export-services.gv",
     "export-services.gv.png",
     "export-stacks.gv",

@@ -14,7 +14,7 @@ from colorama import Fore, Style, init
 from graphviz import Digraph
 
 # First party
-from aws_infra_graph.model import StackInfo, StackExport
+from aws_infra_graph.model import StackInfo, DataExport, StackExport
 from aws_infra_graph.utils import SYSTEM_CACHE_ROOT
 from aws_infra_graph.config import (
     InfraGraphConfig,
@@ -112,7 +112,8 @@ class InfraGraphExporter:
         self._print_export_infos(imported_exports)
         self._visualize_stacks(imported_exports, stack_infos, cluster_stack_graph)
         self._visualize_services(imported_exports, stack_infos)
-        logger.info(f"\nGraph exports finished in {self.output_folder} folder")
+        self._create_data_export(stack_infos, statistics, exports)
+        logger.info(f"\nGraph and data exports finished in {self.output_folder} folder")
 
     @staticmethod
     def delete_caches():
@@ -127,6 +128,20 @@ class InfraGraphExporter:
         for file in files:
             logger.info(f"Removing {str(file)}")
             file.unlink()
+
+    def _create_data_export(
+        self,
+        stack_infos: List[StackInfo],
+        statistics: Counter[str],
+        stack_exports: List[StackExport],
+    ):
+        export = DataExport(
+            stacks=stack_infos,
+            resource_statistics=dict(statistics.most_common()),
+            stack_exports=stack_exports,
+        )
+        with open(f"{self.output_folder}/export.json", "w") as write_file:
+            write_file.write(export.json(indent=2))
 
     @staticmethod
     def _get_statictics(stack_infos: List[StackInfo]) -> Counter:
