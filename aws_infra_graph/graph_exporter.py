@@ -77,9 +77,9 @@ class InfraGraphExporter:
     def __init__(
         self,
         env: str,
-        project_name: Optional[str] = None,
+        output_folder: str,
+        project_name: str,
         config_path: str = "./config.hocon",
-        output_folder: str = "./output",
         data_extractor: Optional[IDataExtractor] = None,
     ):
         self.config = load_config(config_path)

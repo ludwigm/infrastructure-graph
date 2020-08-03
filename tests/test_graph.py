@@ -46,11 +46,11 @@ class TestGraph:
         stack_infos = []
         stack_exports = []
         graph_exporter = InfraGraphExporter(
-            "dev",
-            "testTeam",
-            "tests/test_config.hocon",
-            str(tmp_path),
-            FakeDataExtractor(stack_infos, stack_exports),
+            env="dev",
+            project_name="testTeam",
+            config_path="tests/test_config.hocon",
+            output_folder=str(tmp_path),
+            data_extractor=FakeDataExtractor(stack_infos, stack_exports),
         )
 
         # WHEN i try to export it
@@ -96,11 +96,11 @@ class TestGraph:
             )
         ]
         graph_exporter = InfraGraphExporter(
-            "dev",
-            "testTeam",
-            "tests/test_config.hocon",
-            str(tmp_path),
-            FakeDataExtractor(stack_infos, stack_exports),
+            env="dev",
+            project_name="testTeam",
+            config_path="tests/test_config.hocon",
+            output_folder=str(tmp_path),
+            data_extractor=FakeDataExtractor(stack_infos, stack_exports),
         )
 
         # WHEN i try to export it

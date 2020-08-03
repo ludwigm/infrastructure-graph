@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Iterable, Optional, Protocol
 import boto3
 import coloredlogs
 from colorama import Style
+from colorama.ansi import Fore
 from botocore.exceptions import ClientError
 from boto3_type_annotations import cloudformation
 
@@ -75,6 +76,7 @@ class DataExtractor:
 
     @file_cached("gather_stacks.cache")
     def gather_stacks(self) -> List[StackInfo]:
+        logger.info(f"{Fore.BLUE}Gather data. Can take some minutes.")
         return list(self._gather_stacks_gen())
 
     def _gather_stacks_gen(self) -> Iterable[StackInfo]:

@@ -67,9 +67,25 @@ def main():
     type=bool,
     help="Should the results of the stack graph be clustered by service?",
 )
-def export(env: str, project_name: str, refresh: bool, cluster_stack_graph: bool):
-    logger.info(f"{Fore.BLUE}Starting infra export for {env}. Can take some minutes.")
-    exporter = InfraGraphExporter(env, project_name)
+@click.option(
+    "-o",
+    "--output-folder",
+    "output_folder",
+    required=False,
+    default="output",
+    help="To which folder to export the generated files",
+)
+def export(
+    env: str,
+    project_name: str,
+    refresh: bool,
+    cluster_stack_graph: bool,
+    output_folder: str,
+):
+    logger.info(f"{Fore.BLUE}Starting infra export for {env}.")
+    exporter = InfraGraphExporter(
+        env=env, project_name=project_name, output_folder=output_folder
+    )
     exporter.export(refresh, cluster_stack_graph)
 
 

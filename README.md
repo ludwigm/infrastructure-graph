@@ -94,5 +94,6 @@ Options:
   -c, --cluster-stack-graph  Should the results of the stack graph be
                              clustered by service?
 
+  -o, --output-folder TEXT   To which folder to export the generated files
   --help                     Show this message and exit.
 ```
