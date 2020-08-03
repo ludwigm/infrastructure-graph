@@ -7,6 +7,10 @@ on:
         description: 'major/minor/patch'
         required: true
         default: 'patch'
+      dryMode:
+        description: 'dry mode'
+        required: false
+        default: 'false'
 
 jobs:
   bump-version:
@@ -51,18 +55,20 @@ jobs:
       run: |
         changelog=$(git --no-pager log --oneline --pretty=format:"* %s (%h)" v${{env.version_old}}..HEAD)
         echo "${changelog}"
+        echo "${changelog}" > CHANGELOG_TEMP
         echo "::set-env name=changelog::${changelog}"
-    # TODO investigate how to add multi-line tag messages here (e.g. via a temp file)
     - name: commit results
       run: |
         git add -u
         git config --global user.email "ci@github.com"
         git config --global user.name "CI/CD user"
         git commit -m "Bumping version ${{env.version_old}} -> ${{env.version_new}}"
-        echo "${{env.changelog}}"
-        git tag "v${{env.version_new}}"
+        cat CHANGELOG_TEMP
+        git tag "v${{env.version_new}}" --file CHANGELOG_TEMP
+        git tag "v${{env.version_new}}" -n9
     - name: push results
       uses: ad-m/github-push-action@master
       with:
         github_token: ${{ secrets.GH_ACCESS_TOKEN_PRIVATE }}
         tags: true
+      if: github.event.inputs.dryMode == 'false'

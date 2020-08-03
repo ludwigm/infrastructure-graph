@@ -3,3 +3,4 @@ config.hocon
 **egg-info
 *.pyc
 *.cache
+CHANGELOG_TEMP
