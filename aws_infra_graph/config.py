@@ -6,7 +6,7 @@ import sys
 import json
 import logging
 import importlib.resources as pkg_resources
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pathlib import Path
 
 # Third party
@@ -47,8 +47,10 @@ class InfraGraphConfig(BaseModel):
 
 
 class ProjectConfig(BaseModel):
-    downstream_dependencies: Dict[str, List[ManualDependency]]
-    internal_manual_dependencies: Dict[str, List[ManualInternalDependency]]
+    downstream_dependencies: Optional[Dict[str, List[ManualDependency]]] = None
+    internal_manual_dependencies: Optional[
+        Dict[str, List[ManualInternalDependency]]
+    ] = None
 
     class Config:
         allow_population_by_field_name = True

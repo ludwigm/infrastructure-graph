@@ -24,6 +24,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install poetry
         poetry install
+    # TODO add tag message as release message: git tag v0.1.5 -n --format='%(contents)' https://github.community/t/set-output-truncates-multiline-strings/16852/4
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1

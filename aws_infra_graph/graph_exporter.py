@@ -99,6 +99,7 @@ class InfraGraphExporter:
             self.data_extractor = data_extractor
 
     def export(self, refresh: bool, cluster_stack_graph: bool):
+        # TODO make caching work with multiple projects
         if refresh:
             self.delete_caches()
         stack_infos = self.data_extractor.gather_stacks()
@@ -239,14 +240,14 @@ class InfraGraphExporter:
             rankdir="LR", label="Service Dependencies", labelloc="t", fontsize="20"
         )
 
-        # TODO deduplicate
-        downstream_dependencies = self.config.projects[
-            self.project_name
-        ].downstream_dependencies
+        project_config = self.config.projects.get(self.project_name)
 
-        internal_manual_dependencies = self.config.projects[
-            self.project_name
-        ].internal_manual_dependencies
+        downstream_dependencies = None
+        internal_manual_dependencies = None
+        if project_config:
+            # TODO deduplicate
+            downstream_dependencies = project_config.downstream_dependencies
+            internal_manual_dependencies = project_config.internal_manual_dependencies
 
         nodes_and_edges = self._retrieve_nodes_and_edges_for_service_graph(
             exports_with_service_names,
@@ -382,8 +383,10 @@ class InfraGraphExporter:
     def _retrieve_nodes_and_edges_for_service_graph(
         exports: List[StackExport],
         stack_infos: List[StackInfo],
-        downstream_dependencies: Dict[str, List[ManualDependency]],
-        internal_manual_dependencies: Dict[str, List[ManualInternalDependency]],
+        downstream_dependencies: Optional[Dict[str, List[ManualDependency]]],
+        internal_manual_dependencies: Optional[
+            Dict[str, List[ManualInternalDependency]]
+        ],
     ) -> NodeAndEdgesServiceGraph:
         edge_set = set()
         node_set_internal = set()
@@ -411,17 +414,22 @@ class InfraGraphExporter:
                         (external_service_name, internal_service_name)
                     )
 
-        for service_name, dependencies in downstream_dependencies.items():
-            for dependency in dependencies:
-                downstream_service = dependency.service
-                manual_downstream_nodes.add(downstream_service)
-                manual_downstream_edges.add((service_name, downstream_service))
+        if downstream_dependencies:
+            for service_name, dependencies in downstream_dependencies.items():
+                for dependency in dependencies:
+                    downstream_service = dependency.service
+                    manual_downstream_nodes.add(downstream_service)
+                    manual_downstream_edges.add((service_name, downstream_service))
 
-        for service_name, internal_dependencies in internal_manual_dependencies.items():
-            for internal_dependency in internal_dependencies:
-                upstream_service = internal_dependency.service
-                manual_internal_nodes.add(upstream_service)
-                manual_internal_edges.add((upstream_service, service_name))
+        if internal_manual_dependencies:
+            for (
+                service_name,
+                internal_dependencies,
+            ) in internal_manual_dependencies.items():
+                for internal_dependency in internal_dependencies:
+                    upstream_service = internal_dependency.service
+                    manual_internal_nodes.add(upstream_service)
+                    manual_internal_edges.add((upstream_service, service_name))
 
         return NodeAndEdgesServiceGraph(
             edges=edge_set,
