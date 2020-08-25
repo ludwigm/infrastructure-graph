@@ -1,5 +1,13 @@
+# Core Library
+import logging
+
 # Third party
 from _pytest.config.argparsing import Parser
+
+
+def pytest_configure(config):
+    """Flake8 is very verbose by default. Silence it."""
+    logging.getLogger("flake8").setLevel(logging.WARNING)
 
 
 def pytest_addoption(parser: Parser) -> None:

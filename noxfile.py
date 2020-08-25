@@ -22,4 +22,12 @@ def unit_tests(session: Session) -> None:
 
 @nox.session(python=False, name="static-code-analysis")
 def static_code_analysis(session: Session) -> None:
-    session.run("pytest", "--lint-only", "--black", "--flake8", "--mypy", "--mccabe")
+    session.run(
+        "pytest",
+        "--lint-only",
+        "--black",
+        "--flake8",
+        "--mypy",
+        "--mccabe",
+        "aws_infra_graph",
+    )
